@@ -14,7 +14,135 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      articles: {
+        Row: {
+          content: string | null
+          created_at: string
+          fetched_at: string
+          id: string
+          is_translated: boolean | null
+          language: string | null
+          published_at: string | null
+          source: string | null
+          summary: string[] | null
+          title: string
+          topic: string | null
+          translated_summary: string[] | null
+          url: string
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          is_translated?: boolean | null
+          language?: string | null
+          published_at?: string | null
+          source?: string | null
+          summary?: string[] | null
+          title: string
+          topic?: string | null
+          translated_summary?: string[] | null
+          url: string
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          is_translated?: boolean | null
+          language?: string | null
+          published_at?: string | null
+          source?: string | null
+          summary?: string[] | null
+          title?: string
+          topic?: string | null
+          translated_summary?: string[] | null
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      evaluation_results: {
+        Row: {
+          created_at: string
+          eval_type: string
+          id: string
+          results: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          eval_type: string
+          id?: string
+          results?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          eval_type?: string
+          id?: string
+          results?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          city: string | null
+          created_at: string
+          id: string
+          preferred_language: string | null
+          topics: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          id?: string
+          preferred_language?: string | null
+          topics?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          id?: string
+          preferred_language?: string | null
+          topics?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_feeds: {
+        Row: {
+          created_at: string
+          feed_url: string
+          id: string
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          feed_url: string
+          id?: string
+          title?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          feed_url?: string
+          id?: string
+          title?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
