@@ -1,21 +1,33 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { TOPICS, LANGUAGES } from "@/lib/constants";
-import { MapPin, Globe, Tags, Rss, ArrowRight, ArrowLeft, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { MapPin, Globe, Tags, Rss, ArrowRight, ArrowLeft, CheckCircle2, Plus, X, Sparkles } from "lucide-react";
 
 const STEPS = [
-  { title: "Your Location", description: "Where are you based?", icon: MapPin },
-  { title: "Language", description: "What language should we translate articles into?", icon: Globe },
-  { title: "Topics", description: "What topics interest you?", icon: Tags },
-  { title: "RSS Feeds", description: "Add at least one news source", icon: Rss },
+  { title: "Where are you based?", description: "We'll find local news relevant to your city", icon: MapPin },
+  { title: "Preferred language", description: "We'll translate articles into your language", icon: Globe },
+  { title: "Pick your topics", description: "Select at least one topic you care about", icon: Tags },
+  { title: "Add news sources", description: "Paste RSS feed URLs from sites you follow", icon: Rss },
+];
+
+const STEP_COLORS = [
+  "from-blue-500/20 to-cyan-500/20",
+  "from-violet-500/20 to-purple-500/20",
+  "from-amber-500/20 to-orange-500/20",
+  "from-emerald-500/20 to-teal-500/20",
+];
+
+const ICON_COLORS = [
+  "text-blue-600 dark:text-blue-400",
+  "text-violet-600 dark:text-violet-400",
+  "text-amber-600 dark:text-amber-400",
+  "text-emerald-600 dark:text-emerald-400",
 ];
 
 export default function OnboardingPage() {
@@ -24,12 +36,9 @@ export default function OnboardingPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
 
-  // Profile fields
   const [city, setCity] = useState("");
   const [preferredLanguage, setPreferredLanguage] = useState("English");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
-
-  // Feeds
   const [feeds, setFeeds] = useState<string[]>([]);
   const [newUrl, setNewUrl] = useState("");
   const [saving, setSaving] = useState(false);
@@ -64,7 +73,6 @@ export default function OnboardingPage() {
   const finishOnboarding = async () => {
     setSaving(true);
     try {
-      // Save profile
       const { error: profileError } = await supabase
         .from("profiles")
         .update({
@@ -76,7 +84,6 @@ export default function OnboardingPage() {
 
       if (profileError) throw profileError;
 
-      // Save feeds
       if (feeds.length > 0) {
         const feedInserts = feeds.map(url => ({
           user_id: user!.id,
@@ -87,7 +94,7 @@ export default function OnboardingPage() {
         if (feedError) throw feedError;
       }
 
-      toast({ title: "Setup complete!", description: "You're ready to generate your first digest." });
+      toast({ title: "You're all set! 🎉", description: "Your daily brief is ready to be generated." });
       navigate("/brief", { replace: true });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -99,43 +106,66 @@ export default function OnboardingPage() {
   const StepIcon = STEPS[step].icon;
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-lg space-y-6">
-        {/* Progress */}
-        <div className="flex items-center gap-2 justify-center">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+      {/* Header branding */}
+      <div className="mb-8 text-center">
+        <div className="inline-flex items-center gap-2 mb-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          <span className="text-sm font-medium tracking-wide uppercase text-muted-foreground">Setup</span>
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Expat Daily Brief</h1>
+      </div>
+
+      <div className="w-full max-w-md space-y-8">
+        {/* Progress bar */}
+        <div className="flex items-center gap-1.5 justify-center px-4">
           {STEPS.map((_, i) => (
             <div
               key={i}
-              className={`h-2 rounded-full transition-all ${
-                i <= step ? "bg-primary w-10" : "bg-muted w-6"
+              className={`h-1 rounded-full transition-all duration-500 ease-out ${
+                i < step
+                  ? "bg-primary w-full"
+                  : i === step
+                  ? "bg-primary w-full"
+                  : "bg-muted w-full"
               }`}
             />
           ))}
         </div>
+        <p className="text-center text-xs text-muted-foreground">
+          Step {step + 1} of {STEPS.length}
+        </p>
 
-        <Card>
-          <CardHeader className="text-center pb-4">
-            <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <StepIcon className="h-6 w-6 text-primary" />
+        {/* Card */}
+        <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+          {/* Gradient header strip */}
+          <div className={`bg-gradient-to-r ${STEP_COLORS[step]} px-6 py-5 transition-all duration-500`}>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-background/80 backdrop-blur flex items-center justify-center shadow-sm">
+                <StepIcon className={`h-5 w-5 ${ICON_COLORS[step]} transition-colors duration-500`} />
+              </div>
+              <div>
+                <h2 className="font-semibold text-foreground">{STEPS[step].title}</h2>
+                <p className="text-sm text-muted-foreground">{STEPS[step].description}</p>
+              </div>
             </div>
-            <CardTitle className="text-xl font-serif">{STEPS[step].title}</CardTitle>
-            <CardDescription>{STEPS[step].description}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Step 0: City */}
+          </div>
+
+          {/* Content */}
+          <div className="p-6">
             {step === 0 && (
               <Input
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 placeholder="e.g. Berlin, Tokyo, São Paulo"
+                className="h-11"
                 autoFocus
               />
             )}
 
-            {/* Step 1: Language */}
             {step === 1 && (
               <Select value={preferredLanguage} onValueChange={setPreferredLanguage}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -146,29 +176,27 @@ export default function OnboardingPage() {
               </Select>
             )}
 
-            {/* Step 2: Topics */}
             {step === 2 && (
-              <div className="grid grid-cols-2 gap-3">
-                {TOPICS.map(topic => (
-                  <label
-                    key={topic}
-                    className={`flex items-center gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedTopics.includes(topic)
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted"
-                    }`}
-                  >
-                    <Checkbox
-                      checked={selectedTopics.includes(topic)}
-                      onCheckedChange={() => toggleTopic(topic)}
-                    />
-                    <span className="text-sm">{topic}</span>
-                  </label>
-                ))}
+              <div className="flex flex-wrap gap-2">
+                {TOPICS.map(topic => {
+                  const selected = selectedTopics.includes(topic);
+                  return (
+                    <button
+                      key={topic}
+                      onClick={() => toggleTopic(topic)}
+                      className={`px-3.5 py-2 rounded-full text-sm font-medium transition-all duration-200 border ${
+                        selected
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                          : "bg-secondary text-secondary-foreground border-border hover:border-primary/50 hover:bg-accent"
+                      }`}
+                    >
+                      {topic}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
-            {/* Step 3: RSS Feeds */}
             {step === 3 && (
               <div className="space-y-3">
                 <div className="flex gap-2">
@@ -176,49 +204,57 @@ export default function OnboardingPage() {
                     value={newUrl}
                     onChange={(e) => setNewUrl(e.target.value)}
                     placeholder="https://example.com/rss.xml"
+                    className="h-11"
                     onKeyDown={(e) => e.key === "Enter" && addFeed()}
                   />
-                  <Button onClick={addFeed} size="icon" variant="secondary">
+                  <Button onClick={addFeed} size="icon" className="h-11 w-11 shrink-0">
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
                 {feeds.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
                     {feeds.map((url, i) => (
-                      <div key={i} className="flex items-center justify-between p-2.5 rounded-lg border bg-card text-sm">
-                        <span className="truncate mr-2">{url}</span>
-                        <Button variant="ghost" size="icon" className="shrink-0 h-7 w-7 text-destructive" onClick={() => removeFeed(i)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                      <div
+                        key={i}
+                        className="flex items-center justify-between py-2 px-3 rounded-lg bg-secondary text-sm group"
+                      >
+                        <span className="truncate mr-2 text-secondary-foreground">{url}</span>
+                        <button
+                          onClick={() => removeFeed(i)}
+                          className="shrink-0 h-5 w-5 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
                       </div>
                     ))}
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Add RSS feed URLs from news sites relevant to your expat life.
+                  Tip: search for "site name + RSS feed" to find URLs.
                 </p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Navigation */}
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <Button
             variant="ghost"
             onClick={() => setStep(s => s - 1)}
             disabled={step === 0}
+            className="text-muted-foreground"
           >
-            <ArrowLeft className="h-4 w-4 mr-1" /> Back
+            <ArrowLeft className="h-4 w-4 mr-1.5" /> Back
           </Button>
 
           {step < STEPS.length - 1 ? (
-            <Button onClick={() => setStep(s => s + 1)} disabled={!canProceed()}>
-              Next <ArrowRight className="h-4 w-4 ml-1" />
+            <Button onClick={() => setStep(s => s + 1)} disabled={!canProceed()} className="px-6">
+              Continue <ArrowRight className="h-4 w-4 ml-1.5" />
             </Button>
           ) : (
-            <Button onClick={finishOnboarding} disabled={!canProceed() || saving}>
-              <CheckCircle2 className="h-4 w-4 mr-1" />
+            <Button onClick={finishOnboarding} disabled={!canProceed() || saving} className="px-6">
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
               {saving ? "Saving..." : "Get Started"}
             </Button>
           )}
