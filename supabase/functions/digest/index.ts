@@ -128,13 +128,19 @@ Content: ${stripHtml(content)}`;
   return result.split('\n').filter(l => l.trim()).map(l => l.replace(/^[-•*]\s*/, '').trim()).slice(0, 3);
 }
 
-async function translateSummary(bullets: string[], targetLang: string): Promise<string[]> {
-  const prompt = `Translate the following bullet points faithfully to ${targetLang}. Do not add new information. Return each translated bullet on its own line.
+async function translateTexts(bullets: string[], title: string, targetLang: string): Promise<{ bullets: string[], title: string }> {
+  const prompt = `Translate the following title and bullet points faithfully to ${targetLang}. Do not add new information. Return the translated title on the first line, then each translated bullet on its own line.
+
+Title: ${title}
 
 ${bullets.map((b, i) => `${i + 1}. ${b}`).join('\n')}`;
   
   const result = await callOpenAI([{ role: "user", content: prompt }]);
-  return result.split('\n').filter(l => l.trim()).map(l => l.replace(/^\d+\.\s*/, '').replace(/^[-•*]\s*/, '').trim()).slice(0, 3);
+  const lines = result.split('\n').filter(l => l.trim()).map(l => l.replace(/^\d+\.\s*/, '').replace(/^[-•*]\s*/, '').replace(/^Title:\s*/i, '').trim());
+  return {
+    title: lines[0] || title,
+    bullets: lines.slice(1, 4),
+  };
 }
 
 async function detectLanguage(text: string): Promise<string> {
@@ -211,15 +217,18 @@ serve(async (req) => {
 
         // Step 7: Translate if needed
         let translatedSummary: string[] = [];
+        let translatedTitle = item.title;
         let isTranslated = false;
         if (language.toLowerCase() !== preferredLang.toLowerCase()) {
-          translatedSummary = await translateSummary(summary, preferredLang);
+          const translated = await translateTexts(summary, item.title, preferredLang);
+          translatedSummary = translated.bullets;
+          translatedTitle = translated.title;
           isTranslated = true;
         }
 
         processedArticles.push({
           user_id: user.id,
-          title: item.title,
+          title: isTranslated ? translatedTitle : item.title,
           source: item.source,
           url: item.url,
           content: stripHtml(item.content).slice(0, 1000),
