@@ -217,15 +217,18 @@ serve(async (req) => {
 
         // Step 7: Translate if needed
         let translatedSummary: string[] = [];
+        let translatedTitle = item.title;
         let isTranslated = false;
         if (language.toLowerCase() !== preferredLang.toLowerCase()) {
-          translatedSummary = await translateSummary(summary, preferredLang);
+          const translated = await translateTexts(summary, item.title, preferredLang);
+          translatedSummary = translated.bullets;
+          translatedTitle = translated.title;
           isTranslated = true;
         }
 
         processedArticles.push({
           user_id: user.id,
-          title: item.title,
+          title: isTranslated ? translatedTitle : item.title,
           source: item.source,
           url: item.url,
           content: stripHtml(item.content).slice(0, 1000),
