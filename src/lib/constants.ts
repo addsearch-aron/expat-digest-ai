@@ -1,13 +1,15 @@
 export const TOPICS = [
+  "Immigration",
+  "Taxes",
   "Housing",
-  "Public Transport",
-  "Immigration / Visas",
-  "Safety",
   "Healthcare",
-  "Local Events",
-  "Economy",
   "Education",
+  "Transport",
+  "Safety",
   "Politics",
+  "Business",
+  "Events",
+  "Weather",
 ] as const;
 
 export type Topic = typeof TOPICS[number];
