@@ -179,15 +179,22 @@ serve(async (req) => {
       });
     }
 
-    // Step 1: Fetch RSS items
+    // Step 1: Fetch RSS items (limit per feed for diversity)
+    const maxPerFeed = Math.max(5, Math.ceil(30 / feeds.length));
     let allItems: any[] = [];
     for (const feed of feeds) {
       const items = await fetchRSS(feed.feed_url);
-      allItems = allItems.concat(items);
+      allItems = allItems.concat(items.slice(0, maxPerFeed));
     }
 
     // Step 2: Deduplicate
     allItems = deduplicateItems(allItems);
+
+    // Step 2b: Shuffle to ensure feed diversity
+    for (let i = allItems.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allItems[i], allItems[j]] = [allItems[j], allItems[i]];
+    }
 
     if (allItems.length === 0) {
       return new Response(JSON.stringify({ articles: [], message: "No recent articles found" }), {
