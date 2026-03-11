@@ -7,6 +7,7 @@ export const TOPICS = [
   "Local Events",
   "Economy",
   "Education",
+  "Politics",
 ] as const;
 
 export type Topic = typeof TOPICS[number];
