@@ -179,12 +179,12 @@ serve(async (req) => {
       });
     }
 
-    // Step 1: Fetch RSS items (limit per feed for diversity)
-    const maxPerFeed = Math.max(5, Math.ceil(30 / feeds.length));
+    // Step 1: Fetch RSS items (all items per feed, RSS already filters to last 24h)
+    const MAX_PER_SOURCE = 15;
     let allItems: any[] = [];
     for (const feed of feeds) {
       const items = await fetchRSS(feed.feed_url);
-      allItems = allItems.concat(items.slice(0, maxPerFeed));
+      allItems = allItems.concat(items);
     }
 
     // Step 2: Deduplicate
@@ -202,11 +202,17 @@ serve(async (req) => {
       });
     }
 
-    // Process items (limit to 15 to avoid too many API calls)
-    const toProcess = allItems.slice(0, 15);
+    // Process items: up to 15 per source
+    const totalLimit = MAX_PER_SOURCE * feeds.length;
+    const toProcess = allItems.slice(0, totalLimit);
     const processedArticles: any[] = [];
+    const sourceCount: Record<string, number> = {};
 
     for (const item of toProcess) {
+      // Track per-source count, skip if this source already has 15
+      const src = item.source || "unknown";
+      if ((sourceCount[src] || 0) >= MAX_PER_SOURCE) continue;
+
       try {
         // Step 3: Detect language
         const language = await detectLanguage(item.title + " " + stripHtml(item.content).slice(0, 200));
@@ -247,7 +253,7 @@ serve(async (req) => {
           is_translated: isTranslated,
         });
 
-        if (processedArticles.length >= 10) break;
+        sourceCount[src] = (sourceCount[src] || 0) + 1;
       } catch (e) {
         console.error(`Error processing article "${item.title}":`, e);
       }
