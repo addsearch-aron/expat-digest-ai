@@ -80,6 +80,7 @@ const App = () => (
             <Route path="/feeds" element={<OnboardingGate><FeedsPage /></OnboardingGate>} />
             <Route path="/profile" element={<OnboardingGate><ProfilePage /></OnboardingGate>} />
             <Route path="/evaluation" element={<OnboardingGate><EvaluationPage /></OnboardingGate>} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/" element={<Navigate to="/brief" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
