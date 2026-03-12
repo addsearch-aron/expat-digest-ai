@@ -12,6 +12,7 @@ import ProfilePage from "./pages/ProfilePage";
 import FeedsPage from "./pages/FeedsPage";
 import DailyBriefPage from "./pages/DailyBriefPage";
 import EvaluationPage from "./pages/EvaluationPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
