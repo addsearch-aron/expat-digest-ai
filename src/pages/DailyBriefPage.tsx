@@ -293,5 +293,34 @@ export default function DailyBriefPage() {
             </CardContent>
           </Card>
         )}
+      </div>
+    </AppLayout>
   );
+}
+
+/** Replace [N] references in summary text with clickable links to the corresponding article */
+function renderSummaryWithLinks(text: string, articles: any[]): React.ReactNode {
+  const parts = text.split(/(\[\d+\])/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^\[(\d+)\]$/);
+    if (match) {
+      const idx = parseInt(match[1], 10) - 1;
+      const article = articles[idx];
+      if (article) {
+        return (
+          <a
+            key={i}
+            href={article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline font-medium"
+            title={article.title}
+          >
+            [{match[1]}]
+          </a>
+        );
+      }
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
