@@ -47,7 +47,9 @@ export default function ProfilePage() {
         city,
         preferred_language: preferredLanguage,
         topics: selectedTopics,
-      })
+        digest_hour: digestHour,
+        digest_timezone: digestTimezone,
+      } as any)
       .eq("user_id", user!.id);
     
     if (error) {
