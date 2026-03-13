@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 const TOPICS = [
-  "Housing", "Public Transport", "Immigration / Visas", "Safety",
-  "Healthcare", "Local Events", "Economy", "Education"
+  "Immigration", "Taxes", "Housing", "Healthcare", "Education",
+  "Transport", "Safety", "Politics", "Business", "Economy", "Events", "Weather"
 ];
 
 async function fetchRSS(feedUrl: string): Promise<any[]> {
