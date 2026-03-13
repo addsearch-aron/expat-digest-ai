@@ -33,6 +33,26 @@ export default function DailyBriefPage() {
       .eq("user_id", user!.id)
       .order("published_at", { ascending: false });
     setArticles(data || []);
+    // Auto-generate summary if articles exist
+    if (data && data.length > 0) {
+      generateSummary(data);
+    }
+  };
+
+  const generateSummary = async (articleList: any[]) => {
+    setSummaryLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("summarize-brief", {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+        body: { articles: articleList },
+      });
+      if (error) throw error;
+      setBriefSummary(data?.summary || null);
+    } catch (e: any) {
+      console.error("Summary generation failed:", e);
+    } finally {
+      setSummaryLoading(false);
+    }
   };
 
   const generateDigest = async () => {
