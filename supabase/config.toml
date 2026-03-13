@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.evaluate]
 verify_jwt = false
+
+[functions.scheduled-digest]
+verify_jwt = false
