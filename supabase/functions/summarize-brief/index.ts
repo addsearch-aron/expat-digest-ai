@@ -2,11 +2,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const { articles } = await req.json();
@@ -16,10 +16,10 @@ serve(async (req) => {
       });
     }
 
-    // Build a condensed input from article titles and summaries
+    // Build input with article indices so the LLM can reference them
     const input = articles.slice(0, 20).map((a: any, i: number) => {
       const bullets = (a.translated_summary?.length ? a.translated_summary : a.summary) || [];
-      return `${i + 1}. [${a.topic || "General"}] ${a.title}\n${bullets.map((b: string) => `   - ${b}`).join("\n")}`;
+      return `[${i + 1}] "${a.title}" (${a.topic || "General"}, source: ${a.source || "unknown"})\n${bullets.map((b: string) => `   - ${b}`).join("\n")}`;
     }).join("\n\n");
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");
@@ -34,9 +34,9 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: "You are a news briefing assistant. Given a list of articles with their summaries, produce a single concise executive summary (3-5 sentences) highlighting the most important developments across all topics. Be direct, informative, and prioritize actionable or impactful news. Do not use bullet points."
+            content: `You are a news briefing assistant. Given a list of numbered articles with summaries, produce a comprehensive executive briefing of 3-4 paragraphs covering the most important developments. Group related news thematically. When referencing an article, include its number in square brackets like [1] so readers can find the source. Cover all major topics represented. Be informative, analytical, and highlight actionable or impactful news.`
           },
-          { role: "user", content: `Here are today's articles:\n\n${input}\n\nProvide a single executive summary of the key highlights.` }
+          { role: "user", content: `Here are today's articles:\n\n${input}\n\nProduce a 3-4 paragraph executive briefing with article references in [N] format.` }
         ],
       }),
     });

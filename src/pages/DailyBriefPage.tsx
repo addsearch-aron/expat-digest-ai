@@ -21,6 +21,7 @@ export default function DailyBriefPage() {
   const [page, setPage] = useState(1);
   const [briefSummary, setBriefSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<"summary" | "articles">("summary");
 
   useEffect(() => {
     if (user) loadArticles();
