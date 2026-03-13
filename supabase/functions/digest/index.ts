@@ -263,8 +263,11 @@ serve(async (req) => {
     // Step 4: Filter by user topics
     const filtered: { item: any; topic: string; language: string; index: number }[] = [];
     for (let i = 0; i < toProcess.length; i++) {
-      const { topic, language } = classifyResults[i] || { topic: "Unknown", language: "Unknown" };
-      if (userTopics.length > 0 && !userTopics.some((ut: string) => topic.toLowerCase().includes(ut.toLowerCase()))) {
+      const { topic, language } = classifyResults[i] || { topic: "NONE", language: "Unknown" };
+      // Remove articles that don't fit any topic
+      if (topic === "NONE" || topic === "Unknown") continue;
+      // Filter by user's selected topics
+      if (userTopics.length > 0 && !userTopics.some((ut: string) => topic.toLowerCase() === ut.toLowerCase())) {
         continue;
       }
       filtered.push({ item: toProcess[i], topic, language, index: i });

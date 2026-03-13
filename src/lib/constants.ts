@@ -8,6 +8,7 @@ export const TOPICS = [
   "Safety",
   "Politics",
   "Business",
+  "Economy",
   "Events",
   "Weather",
 ] as const;
