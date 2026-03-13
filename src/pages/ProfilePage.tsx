@@ -16,6 +16,8 @@ export default function ProfilePage() {
   const [city, setCity] = useState("");
   const [preferredLanguage, setPreferredLanguage] = useState("English");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [digestHour, setDigestHour] = useState(8);
+  const [digestTimezone, setDigestTimezone] = useState("Europe/Berlin");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
