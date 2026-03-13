@@ -37,7 +37,6 @@ async function fetchRSS(feedUrl: string): Promise<any[]> {
         });
       }
     }
-    // Also try Atom format
     const entryRegex = /<entry>([\s\S]*?)<\/entry>/gi;
     while ((match = entryRegex.exec(text)) !== null) {
       const entryXml = match[1];
@@ -84,7 +83,7 @@ function stripHtml(html: string): string {
 async function callOpenAI(messages: any[], jsonMode = false): Promise<string> {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-  
+
   const body: any = {
     model: "gpt-4o-mini",
     messages,
@@ -105,48 +104,82 @@ async function callOpenAI(messages: any[], jsonMode = false): Promise<string> {
   return data.choices[0].message.content;
 }
 
-async function classifyTopic(title: string, content: string): Promise<string> {
-  const prompt = `Classify the following article into exactly one of these topics: ${TOPICS.join(", ")}.
-Return ONLY the topic name, nothing else.
+// Batch: classify + detect language for multiple articles in one call
+async function batchClassifyAndDetect(articles: { title: string; content: string }[]): Promise<{ topic: string; language: string }[]> {
+  const articleDescriptions = articles.map((a, i) =>
+    `Article ${i + 1}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content).slice(0, 300)}`
+  ).join('\n\n');
 
-Title: ${title}
-Content: ${stripHtml(content).slice(0, 500)}`;
-  
-  const result = await callOpenAI([{ role: "user", content: prompt }]);
-  const cleaned = result.trim();
-  const matched = TOPICS.find(t => cleaned.toLowerCase().includes(t.toLowerCase()));
-  return matched || cleaned;
+  const prompt = `For each article below, determine:
+1. The language it is written in (return the language name in English, e.g. "English", "French")
+2. The most fitting topic from this list: ${TOPICS.join(", ")}
+
+Return a JSON object with key "results" containing an array of objects, each with "language" and "topic" fields. Return exactly ${articles.length} results in order.
+
+${articleDescriptions}`;
+
+  const result = await callOpenAI([{ role: "user", content: prompt }], true);
+  try {
+    const parsed = JSON.parse(result);
+    return parsed.results || [];
+  } catch {
+    return articles.map(() => ({ topic: "Unknown", language: "Unknown" }));
+  }
 }
 
-async function summarize(title: string, content: string): Promise<string[]> {
-  const prompt = `Summarize this article in exactly 3 concise bullet points. Only include information explicitly present in the article. No hallucinations.
+// Batch: summarize multiple articles in one call
+async function batchSummarize(articles: { title: string; content: string }[]): Promise<string[][]> {
+  const articleDescriptions = articles.map((a, i) =>
+    `Article ${i + 1}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content)}`
+  ).join('\n\n---\n\n');
 
-Title: ${title}
-Content: ${stripHtml(content)}`;
-  
-  const result = await callOpenAI([{ role: "user", content: prompt }]);
-  return result.split('\n').filter(l => l.trim()).map(l => l.replace(/^[-•*]\s*/, '').trim()).slice(0, 3);
+  const prompt = `Summarize each article below in exactly 3 concise bullet points. Only include information explicitly present. No hallucinations.
+
+Return a JSON object with key "summaries" containing an array of arrays (each inner array has 3 bullet point strings). Return exactly ${articles.length} results in order.
+
+${articleDescriptions}`;
+
+  const result = await callOpenAI([{ role: "user", content: prompt }], true);
+  try {
+    const parsed = JSON.parse(result);
+    return parsed.summaries || articles.map(() => ["No summary available"]);
+  } catch {
+    return articles.map(() => ["No summary available"]);
+  }
 }
 
-async function translateTexts(bullets: string[], title: string, targetLang: string): Promise<{ bullets: string[], title: string }> {
-  const prompt = `Translate the following title and bullet points faithfully to ${targetLang}. Do not add new information. Return the translated title on the first line, then each translated bullet on its own line.
+// Batch: translate multiple articles' titles + bullets in one call
+async function batchTranslate(
+  items: { title: string; bullets: string[] }[],
+  targetLang: string
+): Promise<{ title: string; bullets: string[] }[]> {
+  if (items.length === 0) return [];
 
-Title: ${title}
+  const descriptions = items.map((item, i) =>
+    `Item ${i + 1}:\nTitle: ${item.title}\nBullets:\n${item.bullets.map((b, j) => `${j + 1}. ${b}`).join('\n')}`
+  ).join('\n\n---\n\n');
 
-${bullets.map((b, i) => `${i + 1}. ${b}`).join('\n')}`;
-  
-  const result = await callOpenAI([{ role: "user", content: prompt }]);
-  const lines = result.split('\n').filter(l => l.trim()).map(l => l.replace(/^\d+\.\s*/, '').replace(/^[-•*]\s*/, '').replace(/^Title:\s*/i, '').trim());
-  return {
-    title: lines[0] || title,
-    bullets: lines.slice(1, 4),
-  };
+  const prompt = `Translate each item's title and bullet points faithfully to ${targetLang}. Do not add new information.
+
+Return a JSON object with key "translations" containing an array of objects, each with "title" (string) and "bullets" (array of 3 strings). Return exactly ${items.length} results in order.
+
+${descriptions}`;
+
+  const result = await callOpenAI([{ role: "user", content: prompt }], true);
+  try {
+    const parsed = JSON.parse(result);
+    return parsed.translations || items;
+  } catch {
+    return items;
+  }
 }
 
-async function detectLanguage(text: string): Promise<string> {
-  const prompt = `What language is this text written in? Return only the language name in English (e.g. "English", "French", "German"). Text: "${text.slice(0, 300)}"`;
-  const result = await callOpenAI([{ role: "user", content: prompt }]);
-  return result.trim();
+function decodeJwtPayload(token: string): any {
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error("Invalid JWT");
+  const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+  const decoded = atob(payload);
+  return JSON.parse(decoded);
 }
 
 serve(async (req) => {
@@ -156,45 +189,42 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) throw new Error("No authorization header");
 
+    // Auth: decode JWT to get user ID (no network call needed)
+    const token = authHeader.replace("Bearer ", "");
+    const jwtPayload = decodeJwtPayload(token);
+    const userId = jwtPayload.sub;
+    if (!userId) throw new Error("Unauthorized");
+    console.log(`[digest] Authenticated user: ${userId}`);
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } }
-    });
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: authError } = await anonClient.auth.getClaims(token);
-    if (authError || !claimsData?.claims) throw new Error("Unauthorized");
-    const user = { id: claimsData.claims.sub as string };
 
     // Get user profile
-    const { data: profile } = await supabase.from("profiles").select("*").eq("user_id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("*").eq("user_id", userId).single();
     if (!profile) throw new Error("Profile not found");
 
     const userTopics = profile.topics || [];
     const preferredLang = profile.preferred_language || "English";
 
     // Get user feeds
-    const { data: feeds } = await supabase.from("user_feeds").select("*").eq("user_id", user.id);
+    const { data: feeds } = await supabase.from("user_feeds").select("*").eq("user_id", userId);
     if (!feeds || feeds.length === 0) {
       return new Response(JSON.stringify({ articles: [], message: "No feeds configured" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Step 1: Fetch RSS items (all items per feed, RSS already filters to last 24h)
-    const MAX_PER_SOURCE = 15;
-    let allItems: any[] = [];
-    for (const feed of feeds) {
-      const items = await fetchRSS(feed.feed_url);
-      allItems = allItems.concat(items);
-    }
+    // Step 1: Fetch all RSS feeds in parallel
+    console.log(`[digest] Fetching ${feeds.length} feeds...`);
+    const feedResults = await Promise.all(feeds.map(f => fetchRSS(f.feed_url)));
+    let allItems: any[] = feedResults.flat();
+    console.log(`[digest] Fetched ${allItems.length} total items`);
 
     // Step 2: Deduplicate
     allItems = deduplicateItems(allItems);
 
-    // Step 2b: Shuffle to ensure feed diversity
+    // Shuffle for diversity
     for (let i = allItems.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [allItems[i], allItems[j]] = [allItems[j], allItems[i]];
@@ -206,71 +236,109 @@ serve(async (req) => {
       });
     }
 
-    // Process items: up to 15 per source
-    const totalLimit = MAX_PER_SOURCE * feeds.length;
-    const toProcess = allItems.slice(0, totalLimit);
-    const processedArticles: any[] = [];
+    // Limit per source
+    const MAX_PER_SOURCE = 15;
     const sourceCount: Record<string, number> = {};
-
-    for (const item of toProcess) {
-      // Track per-source count, skip if this source already has 15
+    const toProcess: any[] = [];
+    for (const item of allItems) {
       const src = item.source || "unknown";
       if ((sourceCount[src] || 0) >= MAX_PER_SOURCE) continue;
+      sourceCount[src] = (sourceCount[src] || 0) + 1;
+      toProcess.push(item);
+    }
+    console.log(`[digest] Processing ${toProcess.length} articles after per-source limit`);
 
-      try {
-        // Step 3: Detect language
-        const language = await detectLanguage(item.title + " " + stripHtml(item.content).slice(0, 200));
+    // Step 3: Batch classify + detect language (batches of 8)
+    const BATCH_SIZE = 8;
+    const classifyResults: { topic: string; language: string }[] = [];
+    for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
+      const batch = toProcess.slice(i, i + BATCH_SIZE);
+      const results = await batchClassifyAndDetect(batch);
+      classifyResults.push(...results);
+      console.log(`[digest] Classified batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(toProcess.length / BATCH_SIZE)}`);
+    }
 
-        // Step 4: Classify topic
-        const topic = await classifyTopic(item.title, item.content);
+    // Step 4: Filter by user topics
+    const filtered: { item: any; topic: string; language: string; index: number }[] = [];
+    for (let i = 0; i < toProcess.length; i++) {
+      const { topic, language } = classifyResults[i] || { topic: "Unknown", language: "Unknown" };
+      if (userTopics.length > 0 && !userTopics.some((ut: string) => topic.toLowerCase().includes(ut.toLowerCase()))) {
+        continue;
+      }
+      filtered.push({ item: toProcess[i], topic, language, index: i });
+    }
+    console.log(`[digest] ${filtered.length} articles match user topics`);
 
-        // Step 5: Filter by user topics
-        if (userTopics.length > 0 && !userTopics.some((ut: string) => topic.toLowerCase().includes(ut.toLowerCase()))) {
-          continue;
-        }
+    // Step 5: Batch summarize (batches of 5)
+    const SUMMARY_BATCH = 5;
+    const allSummaries: string[][] = [];
+    for (let i = 0; i < filtered.length; i += SUMMARY_BATCH) {
+      const batch = filtered.slice(i, i + SUMMARY_BATCH).map(f => ({
+        title: f.item.title,
+        content: f.item.content,
+      }));
+      const summaries = await batchSummarize(batch);
+      allSummaries.push(...summaries);
+      console.log(`[digest] Summarized batch ${Math.floor(i / SUMMARY_BATCH) + 1}/${Math.ceil(filtered.length / SUMMARY_BATCH)}`);
+    }
 
-        // Step 6: Summarize
-        const summary = await summarize(item.title, item.content);
-
-        // Step 7: Translate if needed
-        let translatedSummary: string[] = [];
-        let translatedTitle = item.title;
-        let isTranslated = false;
-        if (language.toLowerCase() !== preferredLang.toLowerCase()) {
-          const translated = await translateTexts(summary, item.title, preferredLang);
-          translatedSummary = translated.bullets;
-          translatedTitle = translated.title;
-          isTranslated = true;
-        }
-
-        processedArticles.push({
-          user_id: user.id,
-          title: isTranslated ? translatedTitle : item.title,
-          source: item.source,
-          url: item.url,
-          content: stripHtml(item.content).slice(0, 1000),
-          published_at: item.published_at,
-          language,
-          topic,
-          summary,
-          translated_summary: translatedSummary,
-          is_translated: isTranslated,
-        });
-
-        sourceCount[src] = (sourceCount[src] || 0) + 1;
-      } catch (e) {
-        console.error(`Error processing article "${item.title}":`, e);
+    // Step 6: Batch translate articles that need it (batches of 5)
+    const needsTranslation: { idx: number; title: string; bullets: string[] }[] = [];
+    for (let i = 0; i < filtered.length; i++) {
+      const lang = filtered[i].language;
+      if (lang.toLowerCase() !== preferredLang.toLowerCase()) {
+        needsTranslation.push({ idx: i, title: filtered[i].item.title, bullets: allSummaries[i] || [] });
       }
     }
 
+    const translationResults: Map<number, { title: string; bullets: string[] }> = new Map();
+    if (needsTranslation.length > 0) {
+      console.log(`[digest] Translating ${needsTranslation.length} articles...`);
+      const TRANSLATE_BATCH = 5;
+      for (let i = 0; i < needsTranslation.length; i += TRANSLATE_BATCH) {
+        const batch = needsTranslation.slice(i, i + TRANSLATE_BATCH);
+        const results = await batchTranslate(
+          batch.map(b => ({ title: b.title, bullets: b.bullets })),
+          preferredLang
+        );
+        batch.forEach((b, j) => {
+          translationResults.set(b.idx, results[j]);
+        });
+      }
+    }
+
+    // Build final articles
+    const processedArticles = filtered.map((f, i) => {
+      const summary = allSummaries[i] || [];
+      const translation = translationResults.get(i);
+      const isTranslated = !!translation;
+
+      return {
+        user_id: userId,
+        title: isTranslated ? translation!.title : f.item.title,
+        source: f.item.source,
+        url: f.item.url,
+        content: stripHtml(f.item.content).slice(0, 1000),
+        published_at: f.item.published_at,
+        language: f.language,
+        topic: f.topic,
+        summary,
+        translated_summary: isTranslated ? translation!.bullets : [],
+        is_translated: isTranslated,
+      };
+    });
+
+    console.log(`[digest] Saving ${processedArticles.length} articles`);
+
     // Delete existing articles for user, then insert new ones
-    await supabase.from("articles").delete().eq("user_id", user.id);
-    
+    await supabase.from("articles").delete().eq("user_id", userId);
+
     if (processedArticles.length > 0) {
       const { error: insertError } = await supabase.from("articles").insert(processedArticles);
       if (insertError) console.error("Insert error:", insertError);
     }
 
+    console.log(`[digest] Done!`);
     return new Response(JSON.stringify({ articles: processedArticles, count: processedArticles.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
