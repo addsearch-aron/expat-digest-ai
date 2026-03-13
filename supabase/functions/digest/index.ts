@@ -114,6 +114,8 @@ async function batchClassifyAndDetect(articles: { title: string; content: string
 1. The language it is written in (return the language name in English, e.g. "English", "French")
 2. The most fitting topic from this list: ${TOPICS.join(", ")}
 
+You MUST choose exactly one topic from the list above. Use the exact spelling. If an article does not fit ANY of the listed topics, return "NONE" as the topic.
+
 Return a JSON object with key "results" containing an array of objects, each with "language" and "topic" fields. Return exactly ${articles.length} results in order.
 
 ${articleDescriptions}`;
