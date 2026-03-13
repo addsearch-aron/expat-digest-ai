@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, ExternalLink, Clock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, ExternalLink, Clock, Globe, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import { TOPICS } from "@/lib/constants";
 
@@ -19,6 +19,8 @@ export default function DailyBriefPage() {
   const [lastGenerated, setLastGenerated] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [briefSummary, setBriefSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   useEffect(() => {
     if (user) loadArticles();
@@ -31,6 +33,26 @@ export default function DailyBriefPage() {
       .eq("user_id", user!.id)
       .order("published_at", { ascending: false });
     setArticles(data || []);
+    // Auto-generate summary if articles exist
+    if (data && data.length > 0) {
+      generateSummary(data);
+    }
+  };
+
+  const generateSummary = async (articleList: any[]) => {
+    setSummaryLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("summarize-brief", {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+        body: { articles: articleList },
+      });
+      if (error) throw error;
+      setBriefSummary(data?.summary || null);
+    } catch (e: any) {
+      console.error("Summary generation failed:", e);
+    } finally {
+      setSummaryLoading(false);
+    }
   };
 
   const generateDigest = async () => {
@@ -100,6 +122,27 @@ export default function DailyBriefPage() {
             {loading ? "Generating..." : "Generate Digest"}
           </Button>
         </div>
+
+        {/* Executive Summary */}
+        {articles.length > 0 && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Key Highlights
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {summaryLoading ? (
+                <p className="text-sm text-muted-foreground animate-pulse">Generating summary…</p>
+              ) : briefSummary ? (
+                <p className="text-sm text-muted-foreground leading-relaxed">{briefSummary}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">No summary available.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Topic filter bar */}
         {articles.length > 0 && (
