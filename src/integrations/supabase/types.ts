@@ -93,6 +93,8 @@ export type Database = {
         Row: {
           city: string | null
           created_at: string
+          digest_hour: number
+          digest_timezone: string
           id: string
           preferred_language: string | null
           topics: string[] | null
@@ -102,6 +104,8 @@ export type Database = {
         Insert: {
           city?: string | null
           created_at?: string
+          digest_hour?: number
+          digest_timezone?: string
           id?: string
           preferred_language?: string | null
           topics?: string[] | null
@@ -111,6 +115,8 @@ export type Database = {
         Update: {
           city?: string | null
           created_at?: string
+          digest_hour?: number
+          digest_timezone?: string
           id?: string
           preferred_language?: string | null
           topics?: string[] | null
