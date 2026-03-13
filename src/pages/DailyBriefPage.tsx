@@ -123,6 +123,27 @@ export default function DailyBriefPage() {
           </Button>
         </div>
 
+        {/* Executive Summary */}
+        {articles.length > 0 && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Key Highlights
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {summaryLoading ? (
+                <p className="text-sm text-muted-foreground animate-pulse">Generating summary…</p>
+              ) : briefSummary ? (
+                <p className="text-sm text-muted-foreground leading-relaxed">{briefSummary}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">No summary available.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Topic filter bar */}
         {articles.length > 0 && (
           <div className="flex flex-wrap gap-2">
