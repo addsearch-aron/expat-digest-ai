@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, ExternalLink, Clock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, ExternalLink, Clock, Globe, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import { TOPICS } from "@/lib/constants";
 
@@ -19,6 +19,8 @@ export default function DailyBriefPage() {
   const [lastGenerated, setLastGenerated] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [briefSummary, setBriefSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   useEffect(() => {
     if (user) loadArticles();
