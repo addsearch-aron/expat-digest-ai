@@ -188,14 +188,22 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) throw new Error("No authorization header");
+    // Support scheduled invocation via x-scheduled-user-id header (from scheduled-digest function)
+    const scheduledUserId = req.headers.get("x-scheduled-user-id");
+    let userId: string;
 
-    // Auth: decode JWT to get user ID (no network call needed)
-    const token = authHeader.replace("Bearer ", "");
-    const jwtPayload = decodeJwtPayload(token);
-    const userId = jwtPayload.sub;
-    if (!userId) throw new Error("Unauthorized");
+    if (scheduledUserId) {
+      // Called by the scheduled-digest function with service role
+      userId = scheduledUserId;
+    } else {
+      // Called by user directly
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) throw new Error("No authorization header");
+      const token = authHeader.replace("Bearer ", "");
+      const jwtPayload = decodeJwtPayload(token);
+      userId = jwtPayload.sub;
+      if (!userId) throw new Error("Unauthorized");
+    }
     console.log(`[digest] Authenticated user: ${userId}`);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
