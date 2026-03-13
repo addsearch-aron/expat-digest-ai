@@ -1,12 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, ExternalLink, Clock, Globe } from "lucide-react";
+import { RefreshCw, ExternalLink, Clock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
+import { TOPICS } from "@/lib/constants";
+
+const PAGE_SIZE = 10;
 
 export default function DailyBriefPage() {
   const { user, session } = useAuth();
@@ -14,6 +17,8 @@ export default function DailyBriefPage() {
   const [articles, setArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastGenerated, setLastGenerated] = useState<string | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     if (user) loadArticles();
@@ -24,8 +29,7 @@ export default function DailyBriefPage() {
       .from("articles")
       .select("*")
       .eq("user_id", user!.id)
-      .order("published_at", { ascending: false })
-      .limit(10);
+      .order("published_at", { ascending: false });
     setArticles(data || []);
   };
 
@@ -49,6 +53,36 @@ export default function DailyBriefPage() {
     }
   };
 
+  // Compute facet counts
+  const topicCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const a of articles) {
+      const t = a.topic || "Unknown";
+      counts[t] = (counts[t] || 0) + 1;
+    }
+    return counts;
+  }, [articles]);
+
+  // Available topics (only those with articles)
+  const availableTopics = useMemo(() => {
+    return TOPICS.filter((t) => topicCounts[t] && topicCounts[t] > 0);
+  }, [topicCounts]);
+
+  // Filtered articles
+  const filtered = useMemo(() => {
+    if (!selectedTopic) return articles;
+    return articles.filter((a) => a.topic === selectedTopic);
+  }, [articles, selectedTopic]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [selectedTopic]);
+
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto space-y-6">
@@ -67,17 +101,50 @@ export default function DailyBriefPage() {
           </Button>
         </div>
 
-        {articles.length === 0 ? (
+        {/* Topic filter bar */}
+        {articles.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedTopic(null)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                selectedTopic === null
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
+            >
+              All
+              <span className="text-xs opacity-75">({articles.length})</span>
+            </button>
+            {availableTopics.map((topic) => (
+              <button
+                key={topic}
+                onClick={() => setSelectedTopic(topic)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  selectedTopic === topic
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                }`}
+              >
+                {topic}
+                <span className="text-xs opacity-75">({topicCounts[topic]})</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {paginated.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <p className="text-muted-foreground">
-                No articles yet. Add some RSS feeds and click "Generate Digest".
+                {articles.length === 0
+                  ? 'No articles yet. Add some RSS feeds and click "Generate Digest".'
+                  : "No articles for this topic."}
               </p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-4">
-            {articles.map((article) => (
+            {paginated.map((article) => (
               <Card key={article.id}>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
@@ -118,6 +185,31 @@ export default function DailyBriefPage() {
                 </CardContent>
               </Card>
             ))}
+
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
