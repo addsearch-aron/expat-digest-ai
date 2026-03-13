@@ -247,7 +247,7 @@ serve(async (req) => {
     }
 
     // Limit per source
-    const MAX_PER_SOURCE = 15;
+    const MAX_PER_SOURCE = 50;
     const sourceCount: Record<string, number> = {};
     const toProcess: any[] = [];
     for (const item of allItems) {

@@ -97,6 +97,55 @@ export default function ProfilePage() {
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Daily Digest Time</label>
+              <div className="flex gap-3">
+                <Select value={String(digestHour)} onValueChange={(v) => setDigestHour(Number(v))}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <SelectItem key={i} value={String(i)}>
+                        {String(i).padStart(2, "0")}:00
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={digestTimezone} onValueChange={setDigestTimezone}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      "Europe/Berlin",
+                      "Europe/London",
+                      "Europe/Paris",
+                      "Europe/Madrid",
+                      "Europe/Rome",
+                      "Europe/Amsterdam",
+                      "Europe/Warsaw",
+                      "Europe/Istanbul",
+                      "America/New_York",
+                      "America/Chicago",
+                      "America/Denver",
+                      "America/Los_Angeles",
+                      "America/Sao_Paulo",
+                      "Asia/Tokyo",
+                      "Asia/Shanghai",
+                      "Asia/Seoul",
+                      "Asia/Kolkata",
+                      "Asia/Dubai",
+                      "Australia/Sydney",
+                    ].map(tz => (
+                      <SelectItem key={tz} value={tz}>{tz.replace(/_/g, " ")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">Your digest will be generated automatically at this time every day.</p>
+            </div>
+
             <div className="space-y-3">
               <label className="text-sm font-medium">Topics of Interest</label>
               <div className="grid grid-cols-2 gap-3">
