@@ -21,6 +21,7 @@ export default function DailyBriefPage() {
   const [page, setPage] = useState(1);
   const [briefSummary, setBriefSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<"summary" | "articles">("summary");
 
   useEffect(() => {
     if (user) loadArticles();
@@ -123,34 +124,24 @@ export default function DailyBriefPage() {
           </Button>
         </div>
 
-        {/* Executive Summary */}
-        {articles.length > 0 && (
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Key Highlights
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {summaryLoading ? (
-                <p className="text-sm text-muted-foreground animate-pulse">Generating summary…</p>
-              ) : briefSummary ? (
-                <p className="text-sm text-muted-foreground leading-relaxed">{briefSummary}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">No summary available.</p>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Topic filter bar */}
+        {/* Tab bar: Summary | All | Topics */}
         {articles.length > 0 && (
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => setSelectedTopic(null)}
+              onClick={() => setViewMode("summary")}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                selectedTopic === null
+                viewMode === "summary"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Summary
+            </button>
+            <button
+              onClick={() => { setViewMode("articles"); setSelectedTopic(null); }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                viewMode === "articles" && selectedTopic === null
                   ? "bg-primary text-primary-foreground"
                   : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
               }`}
@@ -161,9 +152,9 @@ export default function DailyBriefPage() {
             {availableTopics.map((topic) => (
               <button
                 key={topic}
-                onClick={() => setSelectedTopic(topic)}
+                onClick={() => { setViewMode("articles"); setSelectedTopic(topic); }}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  selectedTopic === topic
+                  viewMode === "articles" && selectedTopic === topic
                     ? "bg-primary text-primary-foreground"
                     : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                 }`}
@@ -175,87 +166,161 @@ export default function DailyBriefPage() {
           </div>
         )}
 
-        {paginated.length === 0 ? (
+        {/* Summary view */}
+        {viewMode === "summary" && articles.length > 0 && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Executive Briefing
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {summaryLoading ? (
+                <div className="space-y-3">
+                  <div className="h-4 bg-muted animate-pulse rounded w-full" />
+                  <div className="h-4 bg-muted animate-pulse rounded w-11/12" />
+                  <div className="h-4 bg-muted animate-pulse rounded w-10/12" />
+                  <div className="h-4 bg-muted animate-pulse rounded w-full mt-4" />
+                  <div className="h-4 bg-muted animate-pulse rounded w-9/12" />
+                </div>
+              ) : briefSummary ? (
+                <div className="space-y-4">
+                  {briefSummary.split("\n\n").map((para, i) => (
+                    <p key={i} className="text-sm text-foreground/90 leading-relaxed">
+                      {renderSummaryWithLinks(para, articles)}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No summary available.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Articles view */}
+        {viewMode === "articles" && (
+          <>
+            {paginated.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <p className="text-muted-foreground">
+                    {articles.length === 0
+                      ? 'No articles yet. Add some RSS feeds and click "Generate Digest".'
+                      : "No articles for this topic."}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {paginated.map((article) => (
+                  <Card key={article.id}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-base leading-tight">{article.title}</CardTitle>
+                        <a
+                          href={article.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        <Badge variant="secondary">{article.topic}</Badge>
+                        {article.is_translated && (
+                          <Badge variant="outline" className="flex items-center gap-1">
+                            <Globe className="h-3 w-3" /> Translated
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {article.source} · {article.published_at ? new Date(article.published_at).toLocaleDateString() : ""}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-1.5">
+                        {(article.is_translated && article.translated_summary?.length > 0
+                          ? article.translated_summary
+                          : article.summary || []
+                        ).map((bullet: string, i: number) => (
+                          <li key={i} className="text-sm text-muted-foreground flex gap-2">
+                            <span className="text-primary mt-0.5">•</span>
+                            <span>{bullet}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => p - 1)}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {articles.length === 0 && viewMode === "summary" && (
           <Card>
             <CardContent className="py-12 text-center">
               <p className="text-muted-foreground">
-                {articles.length === 0
-                  ? 'No articles yet. Add some RSS feeds and click "Generate Digest".'
-                  : "No articles for this topic."}
+                No articles yet. Add some RSS feeds and click "Generate Digest".
               </p>
             </CardContent>
           </Card>
-        ) : (
-          <div className="space-y-4">
-            {paginated.map((article) => (
-              <Card key={article.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base leading-tight">{article.title}</CardTitle>
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 text-muted-foreground hover:text-foreground"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    <Badge variant="secondary">{article.topic}</Badge>
-                    {article.is_translated && (
-                      <Badge variant="outline" className="flex items-center gap-1">
-                        <Globe className="h-3 w-3" /> Translated
-                      </Badge>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {article.source} · {article.published_at ? new Date(article.published_at).toLocaleDateString() : ""}
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-1.5">
-                    {(article.is_translated && article.translated_summary?.length > 0
-                      ? article.translated_summary
-                      : article.summary || []
-                    ).map((bullet: string, i: number) => (
-                      <li key={i} className="text-sm text-muted-foreground flex gap-2">
-                        <span className="text-primary mt-0.5">•</span>
-                        <span>{bullet}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            ))}
-
-            {/* Pagination controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            )}
-          </div>
         )}
       </div>
     </AppLayout>
   );
+}
+
+/** Replace [N] references in summary text with clickable links to the corresponding article */
+function renderSummaryWithLinks(text: string, articles: any[]): React.ReactNode {
+  const parts = text.split(/(\[\d+\])/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^\[(\d+)\]$/);
+    if (match) {
+      const idx = parseInt(match[1], 10) - 1;
+      const article = articles[idx];
+      if (article) {
+        return (
+          <a
+            key={i}
+            href={article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline font-medium"
+            title={article.title}
+          >
+            [{match[1]}]
+          </a>
+        );
+      }
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
