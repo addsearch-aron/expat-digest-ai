@@ -34,6 +34,8 @@ export default function ProfilePage() {
       setCity(data.city || "");
       setPreferredLanguage(data.preferred_language || "English");
       setSelectedTopics(data.topics || []);
+      setDigestHour((data as any).digest_hour ?? 8);
+      setDigestTimezone((data as any).digest_timezone || "Europe/Berlin");
     }
   };
 
