@@ -285,7 +285,7 @@ serve(async (req) => {
     console.log(`[digest] ${filtered.length} articles match user topics`);
 
     // Step 5: Batch summarize (batches of 5)
-    const SUMMARY_BATCH = 5;
+    const SUMMARY_BATCH = 10;
     const allSummaries: string[][] = [];
     for (let i = 0; i < filtered.length; i += SUMMARY_BATCH) {
       const batch = filtered.slice(i, i + SUMMARY_BATCH).map(f => ({
