@@ -46,15 +46,18 @@ serve(async (req) => {
       const today = new Date();
       const dateStr = today.toISOString().split("T")[0]; // YYYY-MM-DD
       
-      // Use Intl to figure out the offset
       try {
+        // Use Intl.DateTimeFormat with hourCycle h23 for reliable 0-23 hour format
         const formatter = new Intl.DateTimeFormat("en-US", {
           timeZone: userTz,
           hour: "numeric",
-          hour12: false,
+          hourCycle: "h23",
         });
-        // Get current hour in user's timezone
-        const localHour = parseInt(formatter.format(nowUtc));
+        const parts = formatter.formatToParts(nowUtc);
+        const hourPart = parts.find(p => p.type === "hour");
+        const localHour = hourPart ? parseInt(hourPart.value, 10) : -1;
+        
+        console.log(`[scheduled-digest] User ${profile.user_id}: tz=${userTz}, localHour=${localHour}, digestHour=${userHour}`);
         
         if (localHour === userHour) {
           usersToTrigger.push(profile.user_id);
