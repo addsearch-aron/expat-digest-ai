@@ -246,17 +246,19 @@ serve(async (req) => {
       });
     }
 
-    // Limit per source
-    const MAX_PER_SOURCE = 50;
+    // Limit per source and global cap for timeout safety
+    const MAX_PER_SOURCE = 10;
+    const MAX_TOTAL = 30;
     const sourceCount: Record<string, number> = {};
     const toProcess: any[] = [];
     for (const item of allItems) {
+      if (toProcess.length >= MAX_TOTAL) break;
       const src = item.source || "unknown";
       if ((sourceCount[src] || 0) >= MAX_PER_SOURCE) continue;
       sourceCount[src] = (sourceCount[src] || 0) + 1;
       toProcess.push(item);
     }
-    console.log(`[digest] Processing ${toProcess.length} articles after per-source limit`);
+    console.log(`[digest] Processing ${toProcess.length} articles after limits`);
 
     // Step 3: Batch classify + detect language (batches of 8)
     const BATCH_SIZE = 8;
