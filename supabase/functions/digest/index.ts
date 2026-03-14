@@ -261,7 +261,7 @@ serve(async (req) => {
     console.log(`[digest] Processing ${toProcess.length} articles after limits`);
 
     // Step 3: Batch classify + detect language (batches of 8)
-    const BATCH_SIZE = 8;
+    const BATCH_SIZE = 15;
     const classifyResults: { topic: string; language: string }[] = [];
     for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
       const batch = toProcess.slice(i, i + BATCH_SIZE);
