@@ -11,7 +11,6 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-
   const [showForgot, setShowForgot] = useState(false);
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -55,79 +54,90 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl text-center font-serif">
-            Expat Daily Brief
-          </CardTitle>
-          <p className="text-center text-muted-foreground text-sm">
-            {isLogin ? "Sign in to your account" : "Create a new account"}
-          </p>
-        </CardHeader>
-        <CardContent>
-          {showForgot ? (
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              <Input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Sending..." : "Send Reset Link"}
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full text-muted-foreground"
-                onClick={() => setShowForgot(false)}
-              >
-                Back to sign in
-              </Button>
-            </form>
-          ) : (
-            <>
-              <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--gradient-warm)' }}>
+      <div className="w-full max-w-md space-y-6">
+        {/* Logo */}
+        <div className="text-center">
+          <div className="inline-flex h-12 w-12 rounded-2xl items-center justify-center text-primary-foreground font-bold text-lg mb-4" style={{ background: 'var(--gradient-hero)' }}>
+            E
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Expat Daily Brief</h1>
+          <p className="text-sm text-muted-foreground mt-1">AI-powered news, personalized for you</p>
+        </div>
+
+        <Card className="border-border/50 overflow-hidden" style={{ boxShadow: 'var(--shadow-elevated)' }}>
+          <CardHeader className="pb-2 pt-6">
+            <CardTitle className="text-lg text-center" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              {showForgot ? "Reset password" : isLogin ? "Welcome back" : "Create account"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {showForgot ? (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
                 <Input
                   type="email"
                   placeholder="Email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  className="h-11 rounded-xl"
                 />
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                />
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Loading..." : isLogin ? "Sign In" : "Sign Up"}
+                <Button type="submit" className="w-full h-11 rounded-xl font-medium" disabled={loading} style={{ background: 'var(--gradient-hero)' }}>
+                  {loading ? "Sending..." : "Send Reset Link"}
+                </Button>
+                <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => setShowForgot(false)}>
+                  Back to sign in
                 </Button>
               </form>
-              {isLogin && (
+            ) : (
+              <>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <Input
+                    type="email"
+                    placeholder="Email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="h-11 rounded-xl"
+                  />
+                  <Input
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="h-11 rounded-xl"
+                  />
+                  <Button type="submit" className="w-full h-11 rounded-xl font-medium" disabled={loading} style={{ background: 'var(--gradient-hero)' }}>
+                    {loading ? "Loading..." : isLogin ? "Sign In" : "Sign Up"}
+                  </Button>
+                </form>
+                {isLogin && (
+                  <Button
+                    variant="link"
+                    className="w-full mt-2 text-muted-foreground text-sm"
+                    onClick={() => setShowForgot(true)}
+                  >
+                    Forgot password?
+                  </Button>
+                )}
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+                  <div className="relative flex justify-center text-xs"><span className="bg-card px-3 text-muted-foreground">or</span></div>
+                </div>
                 <Button
-                  variant="link"
-                  className="w-full mt-2 text-muted-foreground text-sm"
-                  onClick={() => setShowForgot(true)}
+                  variant="outline"
+                  className="w-full rounded-xl h-10 text-muted-foreground"
+                  onClick={() => setIsLogin(!isLogin)}
                 >
-                  Forgot password?
+                  {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                className="w-full mt-2 text-muted-foreground"
-                onClick={() => setIsLogin(!isLogin)}
-              >
-                {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

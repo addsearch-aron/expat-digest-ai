@@ -55,10 +55,15 @@ export default function FeedsPage() {
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Rss className="h-5 w-5" /> Add RSS Feed
+        <h1 className="text-3xl font-bold tracking-tight">My Feeds</h1>
+
+        <Card className="border-border/50 overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2.5 text-lg" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center">
+                <Rss className="h-4 w-4 text-accent-foreground" />
+              </div>
+              Add RSS Feed
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -68,37 +73,46 @@ export default function FeedsPage() {
                 onChange={(e) => setNewUrl(e.target.value)}
                 placeholder="https://example.com/rss.xml"
                 onKeyDown={(e) => e.key === "Enter" && addFeed()}
+                className="h-11 rounded-xl"
               />
-              <Button onClick={addFeed} disabled={loading}>
-                <Plus className="h-4 w-4 mr-1" /> Add
+              <Button onClick={addFeed} disabled={loading} className="h-11 rounded-xl px-5" style={{ background: 'var(--gradient-hero)' }}>
+                <Plus className="h-4 w-4 mr-1.5" /> Add
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-border/50" style={{ boxShadow: 'var(--shadow-card)' }}>
           <CardHeader>
-            <CardTitle>Your Feeds ({feeds.length})</CardTitle>
+            <CardTitle className="text-lg" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              Your Feeds
+              <span className="text-sm font-normal text-muted-foreground ml-2">({feeds.length})</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {feeds.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No feeds added yet.</p>
+              <div className="py-8 text-center">
+                <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
+                  <Rss className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <p className="text-muted-foreground text-sm">No feeds added yet.</p>
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {feeds.map((feed) => (
                   <div
                     key={feed.id}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                    className="flex items-center justify-between p-3.5 rounded-xl border border-border/50 bg-background hover:bg-muted/30 transition-colors group"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{feed.title || feed.feed_url}</p>
-                      <p className="text-xs text-muted-foreground truncate">{feed.feed_url}</p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{feed.feed_url}</p>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => removeFeed(feed.id)}
-                      className="text-destructive shrink-0"
+                      className="text-muted-foreground hover:text-destructive shrink-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

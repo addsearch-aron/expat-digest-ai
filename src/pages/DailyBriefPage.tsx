@@ -34,7 +34,6 @@ export default function DailyBriefPage() {
       .eq("user_id", user!.id)
       .order("published_at", { ascending: false });
     setArticles(data || []);
-    // Auto-generate summary if articles exist
     if (data && data.length > 0) {
       generateSummary(data);
     }
@@ -65,7 +64,7 @@ export default function DailyBriefPage() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      
+
       setLastGenerated(new Date().toLocaleTimeString());
       await loadArticles();
       toast({ title: "Digest ready!", description: `${data.count || 0} articles processed.` });
@@ -76,7 +75,6 @@ export default function DailyBriefPage() {
     }
   };
 
-  // Compute facet counts
   const topicCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const a of articles) {
@@ -86,22 +84,18 @@ export default function DailyBriefPage() {
     return counts;
   }, [articles]);
 
-  // Available topics (only those with articles)
   const availableTopics = useMemo(() => {
     return TOPICS.filter((t) => topicCounts[t] && topicCounts[t] > 0);
   }, [topicCounts]);
 
-  // Filtered articles
   const filtered = useMemo(() => {
     if (!selectedTopic) return articles;
     return articles.filter((a) => a.topic === selectedTopic);
   }, [articles, selectedTopic]);
 
-  // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Reset page when filter changes
   useEffect(() => {
     setPage(1);
   }, [selectedTopic]);
@@ -109,30 +103,36 @@ export default function DailyBriefPage() {
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-serif font-bold">Daily Brief</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Daily Brief</h1>
             {lastGenerated && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1.5">
                 <Clock className="h-3 w-3" /> Last generated: {lastGenerated}
               </p>
             )}
           </div>
-          <Button onClick={generateDigest} disabled={loading}>
+          <Button
+            onClick={generateDigest}
+            disabled={loading}
+            className="rounded-xl px-5 h-11 font-medium shadow-sm"
+            style={{ background: loading ? undefined : 'var(--gradient-hero)' }}
+          >
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             {loading ? "Generating..." : "Generate Digest"}
           </Button>
         </div>
 
-        {/* Tab bar: Summary | All | Topics */}
+        {/* Tab bar */}
         {articles.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 p-1 rounded-2xl bg-muted/50">
             <button
               onClick={() => setViewMode("summary")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                 viewMode === "summary"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Sparkles className="h-3.5 w-3.5" />
@@ -140,27 +140,27 @@ export default function DailyBriefPage() {
             </button>
             <button
               onClick={() => { setViewMode("articles"); setSelectedTopic(null); }}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                 viewMode === "articles" && selectedTopic === null
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               All
-              <span className="text-xs opacity-75">({articles.length})</span>
+              <span className="text-xs opacity-60 tabular-nums">({articles.length})</span>
             </button>
             {availableTopics.map((topic) => (
               <button
                 key={topic}
                 onClick={() => { setViewMode("articles"); setSelectedTopic(topic); }}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                   viewMode === "articles" && selectedTopic === topic
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {topic}
-                <span className="text-xs opacity-75">({topicCounts[topic]})</span>
+                <span className="text-xs opacity-60 tabular-nums">({topicCounts[topic]})</span>
               </button>
             ))}
           </div>
@@ -168,26 +168,27 @@ export default function DailyBriefPage() {
 
         {/* Summary view */}
         {viewMode === "summary" && articles.length > 0 && (
-          <Card className="border-primary/20 bg-primary/5">
+          <Card className="border-0 overflow-hidden" style={{ boxShadow: 'var(--shadow-elevated)' }}>
+            <div className="h-1 w-full" style={{ background: 'var(--gradient-hero)' }} />
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
+              <CardTitle className="text-xl flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center">
+                  <Sparkles className="h-4 w-4 text-accent-foreground" />
+                </div>
                 Executive Briefing
               </CardTitle>
             </CardHeader>
             <CardContent>
               {summaryLoading ? (
                 <div className="space-y-3">
-                  <div className="h-4 bg-muted animate-pulse rounded w-full" />
-                  <div className="h-4 bg-muted animate-pulse rounded w-11/12" />
-                  <div className="h-4 bg-muted animate-pulse rounded w-10/12" />
-                  <div className="h-4 bg-muted animate-pulse rounded w-full mt-4" />
-                  <div className="h-4 bg-muted animate-pulse rounded w-9/12" />
+                  {[100, 92, 85, 100, 78].map((w, i) => (
+                    <div key={i} className={`h-4 bg-muted animate-pulse rounded-md`} style={{ width: `${w}%` }} />
+                  ))}
                 </div>
               ) : briefSummary ? (
                 <div className="space-y-4">
                   {briefSummary.split("\n\n").map((para, i) => (
-                    <p key={i} className="text-sm text-foreground/90 leading-relaxed">
+                    <p key={i} className="text-sm text-foreground/85 leading-relaxed">
                       {renderSummaryWithLinks(para, articles)}
                     </p>
                   ))}
@@ -203,9 +204,12 @@ export default function DailyBriefPage() {
         {viewMode === "articles" && (
           <>
             {paginated.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-muted-foreground">
+              <Card className="border-border/50" style={{ boxShadow: 'var(--shadow-card)' }}>
+                <CardContent className="py-16 text-center">
+                  <div className="h-12 w-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+                    <Newspaper className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-muted-foreground font-medium">
                     {articles.length === 0
                       ? 'No articles yet. Add some RSS feeds and click "Generate Digest".'
                       : "No articles for this topic."}
@@ -213,25 +217,32 @@ export default function DailyBriefPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {paginated.map((article) => (
-                  <Card key={article.id}>
+                  <Card
+                    key={article.id}
+                    className="card-hover border-border/50 overflow-hidden group"
+                  >
                     <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-base leading-tight">{article.title}</CardTitle>
+                      <div className="flex items-start justify-between gap-3">
+                        <CardTitle className="text-base leading-snug font-semibold" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                          {article.title}
+                        </CardTitle>
                         <a
                           href={article.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          className="shrink-0 h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          <ExternalLink className="h-3.5 w-3.5" />
                         </a>
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        <Badge variant="secondary">{article.topic}</Badge>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <Badge variant="secondary" className="rounded-md font-medium text-xs">
+                          {article.topic}
+                        </Badge>
                         {article.is_translated && (
-                          <Badge variant="outline" className="flex items-center gap-1">
+                          <Badge variant="outline" className="rounded-md flex items-center gap-1 text-xs">
                             <Globe className="h-3 w-3" /> Translated
                           </Badge>
                         )}
@@ -241,13 +252,13 @@ export default function DailyBriefPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <ul className="space-y-1.5">
+                      <ul className="space-y-2">
                         {(article.is_translated && article.translated_summary?.length > 0
                           ? article.translated_summary
                           : article.summary || []
                         ).map((bullet: string, i: number) => (
-                          <li key={i} className="text-sm text-muted-foreground flex gap-2">
-                            <span className="text-primary mt-0.5">•</span>
+                          <li key={i} className="text-sm text-muted-foreground flex gap-2.5 leading-relaxed">
+                            <span className="text-primary mt-0.5 shrink-0">•</span>
                             <span>{bullet}</span>
                           </li>
                         ))}
@@ -257,23 +268,25 @@ export default function DailyBriefPage() {
                 ))}
 
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-center gap-2 pt-2">
+                  <div className="flex items-center justify-center gap-3 pt-4">
                     <Button
                       variant="outline"
                       size="sm"
                       disabled={page <= 1}
                       onClick={() => setPage((p) => p - 1)}
+                      className="rounded-lg"
                     >
                       <ChevronLeft className="h-4 w-4 mr-1" /> Previous
                     </Button>
-                    <span className="text-sm text-muted-foreground">
-                      Page {page} of {totalPages}
+                    <span className="text-sm text-muted-foreground tabular-nums">
+                      {page} / {totalPages}
                     </span>
                     <Button
                       variant="outline"
                       size="sm"
                       disabled={page >= totalPages}
                       onClick={() => setPage((p) => p + 1)}
+                      className="rounded-lg"
                     >
                       Next <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>
@@ -285,9 +298,12 @@ export default function DailyBriefPage() {
         )}
 
         {articles.length === 0 && viewMode === "summary" && (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">
+          <Card className="border-border/50" style={{ boxShadow: 'var(--shadow-card)' }}>
+            <CardContent className="py-16 text-center">
+              <div className="h-12 w-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+                <Newspaper className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-muted-foreground font-medium">
                 No articles yet. Add some RSS feeds and click "Generate Digest".
               </p>
             </CardContent>
@@ -298,7 +314,15 @@ export default function DailyBriefPage() {
   );
 }
 
-/** Replace [N] references in summary text with clickable links to the corresponding article */
+function Newspaper(props: any) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/>
+      <path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/>
+    </svg>
+  );
+}
+
 function renderSummaryWithLinks(text: string, articles: any[]): React.ReactNode {
   const parts = text.split(/(\[\d+\])/g);
   return parts.map((part, i) => {
