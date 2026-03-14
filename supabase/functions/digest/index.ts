@@ -351,6 +351,36 @@ serve(async (req) => {
       if (insertError) console.error("Insert error:", insertError);
     }
 
+    // Step 7: Generate executive summary and cache it
+    if (processedArticles.length > 0) {
+      console.log(`[digest] Generating executive summary...`);
+      try {
+        const input = processedArticles.slice(0, 20).map((a: any, i: number) => {
+          const bullets = (a.translated_summary?.length ? a.translated_summary : a.summary) || [];
+          return `[${i + 1}] "${a.title}" (${a.topic || "General"}, source: ${a.source || "unknown"})\n${bullets.map((b: string) => `   - ${b}`).join("\n")}`;
+        }).join("\n\n");
+
+        const summaryText = await callOpenAI([
+          {
+            role: "system",
+            content: `You are a news briefing assistant. Given a list of numbered articles with summaries, produce a comprehensive executive briefing of 3-4 paragraphs covering the most important developments. Group related news thematically. When referencing an article, include its number in square brackets like [1] so readers can find the source. Cover all major topics represented. Be informative, analytical, and highlight actionable or impactful news.`
+          },
+          { role: "user", content: `Here are today's articles:\n\n${input}\n\nProduce a 3-4 paragraph executive briefing with article references in [N] format.` }
+        ]);
+
+        // Delete old summaries for this user, then insert new one
+        await supabase.from("executive_summaries").delete().eq("user_id", userId);
+        const { error: sumError } = await supabase.from("executive_summaries").insert({
+          user_id: userId,
+          summary: summaryText.trim(),
+        });
+        if (sumError) console.error("Summary insert error:", sumError);
+        else console.log(`[digest] Executive summary cached.`);
+      } catch (e) {
+        console.error("[digest] Executive summary generation failed:", e);
+      }
+    }
+
     console.log(`[digest] Done!`);
     return new Response(JSON.stringify({ articles: processedArticles, count: processedArticles.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
