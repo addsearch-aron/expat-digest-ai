@@ -309,7 +309,7 @@ serve(async (req) => {
     const translationResults: Map<number, { title: string; bullets: string[] }> = new Map();
     if (needsTranslation.length > 0) {
       console.log(`[digest] Translating ${needsTranslation.length} articles...`);
-      const TRANSLATE_BATCH = 5;
+      const TRANSLATE_BATCH = 10;
       for (let i = 0; i < needsTranslation.length; i += TRANSLATE_BATCH) {
         const batch = needsTranslation.slice(i, i + TRANSLATE_BATCH);
         const results = await batchTranslate(
