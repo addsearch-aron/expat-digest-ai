@@ -24,8 +24,31 @@ export default function DailyBriefPage() {
   const [viewMode, setViewMode] = useState<"summary" | "articles">("summary");
 
   useEffect(() => {
-    if (user) loadArticles();
+    if (user) {
+      loadArticles();
+      loadCachedSummary();
+    }
   }, [user]);
+
+  const loadCachedSummary = async () => {
+    setSummaryLoading(true);
+    try {
+      const { data } = await supabase
+        .from("executive_summaries")
+        .select("summary")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (data?.summary) {
+        setBriefSummary(data.summary);
+      }
+    } catch (e: any) {
+      console.error("Failed to load cached summary:", e);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
 
   const loadArticles = async () => {
     const { data } = await supabase
@@ -34,25 +57,6 @@ export default function DailyBriefPage() {
       .eq("user_id", user!.id)
       .order("published_at", { ascending: false });
     setArticles(data || []);
-    if (data && data.length > 0) {
-      generateSummary(data);
-    }
-  };
-
-  const generateSummary = async (articleList: any[]) => {
-    setSummaryLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("summarize-brief", {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-        body: { articles: articleList },
-      });
-      if (error) throw error;
-      setBriefSummary(data?.summary || null);
-    } catch (e: any) {
-      console.error("Summary generation failed:", e);
-    } finally {
-      setSummaryLoading(false);
-    }
   };
 
   const generateDigest = async () => {
