@@ -104,6 +104,20 @@ async function callOpenAI(messages: any[], jsonMode = false): Promise<string> {
   return data.choices[0].message.content;
 }
 
+// Run batches in parallel with concurrency limit
+async function runParallel<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let idx = 0;
+  const run = async () => {
+    while (idx < tasks.length) {
+      const i = idx++;
+      results[i] = await tasks[i]();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, () => run()));
+  return results;
+}
+
 // Batch: classify + detect language for multiple articles in one call
 async function batchClassifyAndDetect(articles: { title: string; content: string }[]): Promise<{ topic: string; language: string }[]> {
   const articleDescriptions = articles.map((a, i) =>
@@ -150,29 +164,42 @@ ${articleDescriptions}`;
   }
 }
 
-// Batch: translate multiple articles' titles + bullets in one call
-async function batchTranslate(
-  items: { title: string; bullets: string[] }[],
+// Batch: summarize AND translate in one call (saves a whole round-trip for non-English articles)
+async function batchSummarizeAndTranslate(
+  articles: { title: string; content: string }[],
   targetLang: string
-): Promise<{ title: string; bullets: string[] }[]> {
-  if (items.length === 0) return [];
-
-  const descriptions = items.map((item, i) =>
-    `Item ${i + 1}:\nTitle: ${item.title}\nBullets:\n${item.bullets.map((b, j) => `${j + 1}. ${b}`).join('\n')}`
+): Promise<{ summary: string[]; translatedTitle: string; translatedSummary: string[] }[]> {
+  const articleDescriptions = articles.map((a, i) =>
+    `Article ${i + 1}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content)}`
   ).join('\n\n---\n\n');
 
-  const prompt = `Translate each item's title and bullet points faithfully to ${targetLang}. Do not add new information.
+  const prompt = `For each article below:
+1. Summarize it in exactly 3 concise bullet points in the original language. Only include information explicitly present.
+2. Translate the title and the 3 bullet points to ${targetLang}.
 
-Return a JSON object with key "translations" containing an array of objects, each with "title" (string) and "bullets" (array of 3 strings). Return exactly ${items.length} results in order.
+Return a JSON object with key "results" containing an array of objects, each with:
+- "summary": array of 3 bullet point strings (original language)
+- "translated_title": string (title in ${targetLang})
+- "translated_summary": array of 3 bullet point strings (in ${targetLang})
 
-${descriptions}`;
+Return exactly ${articles.length} results in order.
+
+${articleDescriptions}`;
 
   const result = await callOpenAI([{ role: "user", content: prompt }], true);
   try {
     const parsed = JSON.parse(result);
-    return parsed.translations || items;
+    return (parsed.results || []).map((r: any) => ({
+      summary: r.summary || ["No summary available"],
+      translatedTitle: r.translated_title || "",
+      translatedSummary: r.translated_summary || [],
+    }));
   } catch {
-    return items;
+    return articles.map(() => ({
+      summary: ["No summary available"],
+      translatedTitle: "",
+      translatedSummary: [],
+    }));
   }
 }
 
@@ -193,10 +220,8 @@ serve(async (req) => {
     let userId: string;
 
     if (scheduledUserId) {
-      // Called by the scheduled-digest function with service role
       userId = scheduledUserId;
     } else {
-      // Called by user directly
       const authHeader = req.headers.get("Authorization");
       if (!authHeader?.startsWith("Bearer ")) throw new Error("No authorization header");
       const token = authHeader.replace("Bearer ", "");
@@ -246,99 +271,114 @@ serve(async (req) => {
       });
     }
 
-    // Limit per source and global cap for timeout safety
-    const MAX_PER_SOURCE = 10;
-    const MAX_TOTAL = 30;
+    // Limit per source (30 per source, no global cap)
+    const MAX_PER_SOURCE = 30;
     const sourceCount: Record<string, number> = {};
     const toProcess: any[] = [];
     for (const item of allItems) {
-      if (toProcess.length >= MAX_TOTAL) break;
       const src = item.source || "unknown";
       if ((sourceCount[src] || 0) >= MAX_PER_SOURCE) continue;
       sourceCount[src] = (sourceCount[src] || 0) + 1;
       toProcess.push(item);
     }
-    console.log(`[digest] Processing ${toProcess.length} articles after limits`);
+    console.log(`[digest] Processing ${toProcess.length} articles after per-source limit`);
 
-    // Step 3: Batch classify + detect language (batches of 8)
-    const BATCH_SIZE = 15;
-    const classifyResults: { topic: string; language: string }[] = [];
-    for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
-      const batch = toProcess.slice(i, i + BATCH_SIZE);
-      const results = await batchClassifyAndDetect(batch);
-      classifyResults.push(...results);
-      console.log(`[digest] Classified batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(toProcess.length / BATCH_SIZE)}`);
+    // Step 3: Classify + detect language in PARALLEL batches (15 per batch, 4 concurrent)
+    const CLASSIFY_BATCH = 15;
+    const classifyTasks: (() => Promise<{ topic: string; language: string }[]>)[] = [];
+    for (let i = 0; i < toProcess.length; i += CLASSIFY_BATCH) {
+      const batch = toProcess.slice(i, i + CLASSIFY_BATCH);
+      classifyTasks.push(() => batchClassifyAndDetect(batch));
     }
+    console.log(`[digest] Classifying in ${classifyTasks.length} batches (4 concurrent)...`);
+    const classifyBatchResults = await runParallel(classifyTasks, 4);
+    const classifyResults = classifyBatchResults.flat();
+    console.log(`[digest] Classification done`);
 
-    // Step 4: Filter by user topics
-    const filtered: { item: any; topic: string; language: string; index: number }[] = [];
+    // Step 4: Filter by user topics — drop NONE/Unknown immediately
+    const filtered: { item: any; topic: string; language: string }[] = [];
     for (let i = 0; i < toProcess.length; i++) {
       const { topic, language } = classifyResults[i] || { topic: "NONE", language: "Unknown" };
-      // Remove articles that don't fit any topic
       if (topic === "NONE" || topic === "Unknown") continue;
-      // Filter by user's selected topics
       if (userTopics.length > 0 && !userTopics.some((ut: string) => topic.toLowerCase() === ut.toLowerCase())) {
         continue;
       }
-      filtered.push({ item: toProcess[i], topic, language, index: i });
+      filtered.push({ item: toProcess[i], topic, language });
     }
     console.log(`[digest] ${filtered.length} articles match user topics`);
 
-    // Step 5: Batch summarize (batches of 5)
-    const SUMMARY_BATCH = 10;
-    const allSummaries: string[][] = [];
-    for (let i = 0; i < filtered.length; i += SUMMARY_BATCH) {
-      const batch = filtered.slice(i, i + SUMMARY_BATCH).map(f => ({
-        title: f.item.title,
-        content: f.item.content,
-      }));
-      const summaries = await batchSummarize(batch);
-      allSummaries.push(...summaries);
-      console.log(`[digest] Summarized batch ${Math.floor(i / SUMMARY_BATCH) + 1}/${Math.ceil(filtered.length / SUMMARY_BATCH)}`);
-    }
+    // Step 5+6: Split into same-language (just summarize) and foreign-language (summarize+translate in one call)
+    // This eliminates the separate translation step entirely for foreign articles
+    const sameLanguage: { idx: number; item: any; topic: string; language: string }[] = [];
+    const foreignLanguage: { idx: number; item: any; topic: string; language: string }[] = [];
 
-    // Step 6: Batch translate articles that need it (batches of 5)
-    const needsTranslation: { idx: number; title: string; bullets: string[] }[] = [];
     for (let i = 0; i < filtered.length; i++) {
-      const lang = filtered[i].language;
-      if (lang.toLowerCase() !== preferredLang.toLowerCase()) {
-        needsTranslation.push({ idx: i, title: filtered[i].item.title, bullets: allSummaries[i] || [] });
+      if (filtered[i].language.toLowerCase() === preferredLang.toLowerCase()) {
+        sameLanguage.push({ idx: i, ...filtered[i] });
+      } else {
+        foreignLanguage.push({ idx: i, ...filtered[i] });
       }
     }
 
-    const translationResults: Map<number, { title: string; bullets: string[] }> = new Map();
-    if (needsTranslation.length > 0) {
-      console.log(`[digest] Translating ${needsTranslation.length} articles...`);
-      const TRANSLATE_BATCH = 10;
-      for (let i = 0; i < needsTranslation.length; i += TRANSLATE_BATCH) {
-        const batch = needsTranslation.slice(i, i + TRANSLATE_BATCH);
-        const results = await batchTranslate(
-          batch.map(b => ({ title: b.title, bullets: b.bullets })),
+    console.log(`[digest] ${sameLanguage.length} same-language, ${foreignLanguage.length} need translation`);
+
+    // Process both tracks in parallel
+    const PROCESS_BATCH = 10;
+    const articleData: Map<number, { summary: string[]; translatedTitle?: string; translatedSummary?: string[] }> = new Map();
+
+    // Build tasks for same-language articles (summarize only)
+    const summarizeTasks: (() => Promise<void>)[] = [];
+    for (let i = 0; i < sameLanguage.length; i += PROCESS_BATCH) {
+      const batch = sameLanguage.slice(i, i + PROCESS_BATCH);
+      summarizeTasks.push(async () => {
+        const summaries = await batchSummarize(batch.map(b => ({ title: b.item.title, content: b.item.content })));
+        batch.forEach((b, j) => {
+          articleData.set(b.idx, { summary: summaries[j] || ["No summary available"] });
+        });
+      });
+    }
+
+    // Build tasks for foreign-language articles (summarize + translate in one call)
+    const translateTasks: (() => Promise<void>)[] = [];
+    for (let i = 0; i < foreignLanguage.length; i += PROCESS_BATCH) {
+      const batch = foreignLanguage.slice(i, i + PROCESS_BATCH);
+      translateTasks.push(async () => {
+        const results = await batchSummarizeAndTranslate(
+          batch.map(b => ({ title: b.item.title, content: b.item.content })),
           preferredLang
         );
         batch.forEach((b, j) => {
-          translationResults.set(b.idx, results[j]);
+          articleData.set(b.idx, {
+            summary: results[j].summary,
+            translatedTitle: results[j].translatedTitle,
+            translatedSummary: results[j].translatedSummary,
+          });
         });
-      }
+      });
     }
+
+    // Run ALL summarize and translate tasks in parallel (4 concurrent)
+    const allTasks = [...summarizeTasks, ...translateTasks];
+    console.log(`[digest] Processing ${allTasks.length} summarize/translate batches (4 concurrent)...`);
+    await runParallel(allTasks, 4);
+    console.log(`[digest] Summarization/translation done`);
 
     // Build final articles
     const processedArticles = filtered.map((f, i) => {
-      const summary = allSummaries[i] || [];
-      const translation = translationResults.get(i);
-      const isTranslated = !!translation;
+      const data = articleData.get(i) || { summary: ["No summary available"] };
+      const isTranslated = !!data.translatedSummary?.length;
 
       return {
         user_id: userId,
-        title: isTranslated ? translation!.title : f.item.title,
+        title: isTranslated && data.translatedTitle ? data.translatedTitle : f.item.title,
         source: f.item.source,
         url: f.item.url,
         content: stripHtml(f.item.content).slice(0, 1000),
         published_at: f.item.published_at,
         language: f.language,
         topic: f.topic,
-        summary,
-        translated_summary: isTranslated ? translation!.bullets : [],
+        summary: data.summary,
+        translated_summary: data.translatedSummary || [],
         is_translated: isTranslated,
       };
     });
