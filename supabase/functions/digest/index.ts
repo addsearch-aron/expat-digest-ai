@@ -246,20 +246,22 @@ serve(async (req) => {
       });
     }
 
-    // Limit per source
-    const MAX_PER_SOURCE = 50;
+    // Limit per source and global cap for timeout safety
+    const MAX_PER_SOURCE = 10;
+    const MAX_TOTAL = 30;
     const sourceCount: Record<string, number> = {};
     const toProcess: any[] = [];
     for (const item of allItems) {
+      if (toProcess.length >= MAX_TOTAL) break;
       const src = item.source || "unknown";
       if ((sourceCount[src] || 0) >= MAX_PER_SOURCE) continue;
       sourceCount[src] = (sourceCount[src] || 0) + 1;
       toProcess.push(item);
     }
-    console.log(`[digest] Processing ${toProcess.length} articles after per-source limit`);
+    console.log(`[digest] Processing ${toProcess.length} articles after limits`);
 
     // Step 3: Batch classify + detect language (batches of 8)
-    const BATCH_SIZE = 8;
+    const BATCH_SIZE = 15;
     const classifyResults: { topic: string; language: string }[] = [];
     for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
       const batch = toProcess.slice(i, i + BATCH_SIZE);
@@ -283,7 +285,7 @@ serve(async (req) => {
     console.log(`[digest] ${filtered.length} articles match user topics`);
 
     // Step 5: Batch summarize (batches of 5)
-    const SUMMARY_BATCH = 5;
+    const SUMMARY_BATCH = 10;
     const allSummaries: string[][] = [];
     for (let i = 0; i < filtered.length; i += SUMMARY_BATCH) {
       const batch = filtered.slice(i, i + SUMMARY_BATCH).map(f => ({
@@ -307,7 +309,7 @@ serve(async (req) => {
     const translationResults: Map<number, { title: string; bullets: string[] }> = new Map();
     if (needsTranslation.length > 0) {
       console.log(`[digest] Translating ${needsTranslation.length} articles...`);
-      const TRANSLATE_BATCH = 5;
+      const TRANSLATE_BATCH = 10;
       for (let i = 0; i < needsTranslation.length; i += TRANSLATE_BATCH) {
         const batch = needsTranslation.slice(i, i + TRANSLATE_BATCH);
         const results = await batchTranslate(
