@@ -71,6 +71,7 @@ export default function DailyBriefPage() {
 
       setLastGenerated(new Date().toLocaleTimeString());
       await loadArticles();
+      await loadCachedSummary();
       toast({ title: "Digest ready!", description: `${data.count || 0} articles processed.` });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
