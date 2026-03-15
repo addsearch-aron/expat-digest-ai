@@ -347,17 +347,12 @@ export default function DailyBriefPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <ul className="space-y-2">
+                      <p className="text-sm text-muted-foreground leading-relaxed">
                         {(article.is_translated && article.translated_summary?.length > 0
                           ? article.translated_summary
                           : article.summary || []
-                        ).map((bullet: string, i: number) => (
-                          <li key={i} className="text-sm text-muted-foreground flex gap-2.5 leading-relaxed">
-                            <span className="text-primary mt-0.5 shrink-0">•</span>
-                            <span>{bullet}</span>
-                          </li>
-                        ))}
-                      </ul>
+                        ).join(" ")}
+                      </p>
                     </CardContent>
                   </Card>
                 ))}
