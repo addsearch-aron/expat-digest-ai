@@ -149,9 +149,9 @@ async function batchSummarize(articles: { title: string; content: string }[]): P
     `Article ${i + 1}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content)}`
   ).join('\n\n---\n\n');
 
-  const prompt = `Summarize each article below in exactly 3 concise bullet points. Only include information explicitly present. No hallucinations.
+  const prompt = `Summarize each article below in a single concise paragraph (2-3 sentences). Only include information explicitly present. No hallucinations.
 
-Return a JSON object with key "summaries" containing an array of arrays (each inner array has 3 bullet point strings). Return exactly ${articles.length} results in order.
+Return a JSON object with key "summaries" containing an array of arrays, where each inner array has exactly 1 string (the paragraph summary). Return exactly ${articles.length} results in order.
 
 ${articleDescriptions}`;
 
@@ -174,13 +174,13 @@ async function batchSummarizeAndTranslate(
   ).join('\n\n---\n\n');
 
   const prompt = `For each article below:
-1. Summarize it in exactly 3 concise bullet points in the original language. Only include information explicitly present.
-2. Translate the title and the 3 bullet points to ${targetLang}.
+1. Summarize it in a single concise paragraph (2-3 sentences) in the original language. Only include information explicitly present.
+2. Translate the title and the summary paragraph to ${targetLang}.
 
 Return a JSON object with key "results" containing an array of objects, each with:
-- "summary": array of 3 bullet point strings (original language)
+- "summary": array with 1 string (the paragraph summary in original language)
 - "translated_title": string (title in ${targetLang})
-- "translated_summary": array of 3 bullet point strings (in ${targetLang})
+- "translated_summary": array with 1 string (the paragraph summary in ${targetLang})
 
 Return exactly ${articles.length} results in order.
 

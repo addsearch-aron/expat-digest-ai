@@ -18,8 +18,8 @@ serve(async (req) => {
 
     // Build input with article indices so the LLM can reference them
     const input = articles.slice(0, 20).map((a: any, i: number) => {
-      const bullets = (a.translated_summary?.length ? a.translated_summary : a.summary) || [];
-      return `[${i + 1}] "${a.title}" (${a.topic || "General"}, source: ${a.source || "unknown"})\n${bullets.map((b: string) => `   - ${b}`).join("\n")}`;
+      const summaryText = (a.translated_summary?.length ? a.translated_summary : a.summary) || [];
+      return `[${i + 1}] "${a.title}" (${a.topic || "General"}, source: ${a.source || "unknown"})\n   ${summaryText.join(" ")}`;
     }).join("\n\n");
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");
