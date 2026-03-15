@@ -11,6 +11,28 @@ import { TOPICS } from "@/lib/constants";
 
 const PAGE_SIZE = 10;
 
+function getLast7Days(): Date[] {
+  const days: Date[] = [];
+  const today = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    days.push(d);
+  }
+  return days;
+}
+
+function formatDayLabel(date: Date): string {
+  return date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+const DAY_ABBREVS = ["S", "M", "T", "W", "T", "F", "S"];
+
 export default function DailyBriefPage() {
   const { user, session } = useAuth();
   const { toast } = useToast();
@@ -23,20 +45,37 @@ export default function DailyBriefPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"summary" | "articles">("summary");
 
+  const last7Days = useMemo(() => getLast7Days(), []);
+  const [selectedDate, setSelectedDate] = useState<Date>(last7Days[0]);
+  const today = last7Days[0];
+
   useEffect(() => {
     if (user) {
       loadArticles();
-      loadCachedSummary();
     }
   }, [user]);
 
-  const loadCachedSummary = async () => {
+  useEffect(() => {
+    if (user) {
+      loadCachedSummary(selectedDate);
+    }
+  }, [user, selectedDate]);
+
+  const loadCachedSummary = async (date: Date) => {
     setSummaryLoading(true);
+    setBriefSummary(null);
     try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
       const { data } = await supabase
         .from("executive_summaries")
         .select("summary")
         .eq("user_id", user!.id)
+        .gte("created_at", startOfDay.toISOString())
+        .lte("created_at", endOfDay.toISOString())
         .order("created_at", { ascending: false })
         .limit(1)
         .single();
@@ -71,7 +110,8 @@ export default function DailyBriefPage() {
 
       setLastGenerated(new Date().toLocaleTimeString());
       await loadArticles();
-      await loadCachedSummary();
+      setSelectedDate(new Date(new Date().setHours(0,0,0,0)));
+      await loadCachedSummary(new Date(new Date().setHours(0,0,0,0)));
       toast({ title: "Digest ready!", description: `${data.count || 0} articles processed.` });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -175,13 +215,63 @@ export default function DailyBriefPage() {
         {viewMode === "summary" && articles.length > 0 && (
           <Card className="border-0 overflow-hidden" style={{ boxShadow: 'var(--shadow-elevated)' }}>
             <div className="h-1 w-full" style={{ background: 'var(--gradient-hero)' }} />
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-3 space-y-3">
               <CardTitle className="text-xl flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center">
                   <Sparkles className="h-4 w-4 text-accent-foreground" />
                 </div>
                 Executive Briefing
               </CardTitle>
+              {/* Day navigation */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-lg"
+                    disabled={isSameDay(selectedDate, last7Days[last7Days.length - 1])}
+                    onClick={() => {
+                      const idx = last7Days.findIndex(d => isSameDay(d, selectedDate));
+                      if (idx < last7Days.length - 1) setSelectedDate(last7Days[idx + 1]);
+                    }}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">{formatDayLabel(selectedDate)}</span>
+                    {isSameDay(selectedDate, today) && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-md">Today</Badge>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-lg"
+                    disabled={isSameDay(selectedDate, today)}
+                    onClick={() => {
+                      const idx = last7Days.findIndex(d => isSameDay(d, selectedDate));
+                      if (idx > 0) setSelectedDate(last7Days[idx - 1]);
+                    }}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex justify-center gap-1">
+                  {[...last7Days].reverse().map((day) => (
+                    <button
+                      key={day.toISOString()}
+                      onClick={() => setSelectedDate(day)}
+                      className={`h-7 w-7 rounded-full text-xs font-medium transition-all duration-200 ${
+                        isSameDay(day, selectedDate)
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      {DAY_ABBREVS[day.getDay()]}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {summaryLoading ? (
