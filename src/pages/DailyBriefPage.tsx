@@ -11,6 +11,28 @@ import { TOPICS } from "@/lib/constants";
 
 const PAGE_SIZE = 10;
 
+function getLast7Days(): Date[] {
+  const days: Date[] = [];
+  const today = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    days.push(d);
+  }
+  return days;
+}
+
+function formatDayLabel(date: Date): string {
+  return date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+const DAY_ABBREVS = ["S", "M", "T", "W", "T", "F", "S"];
+
 export default function DailyBriefPage() {
   const { user, session } = useAuth();
   const { toast } = useToast();
@@ -23,20 +45,37 @@ export default function DailyBriefPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"summary" | "articles">("summary");
 
+  const last7Days = useMemo(() => getLast7Days(), []);
+  const [selectedDate, setSelectedDate] = useState<Date>(last7Days[0]);
+  const today = last7Days[0];
+
   useEffect(() => {
     if (user) {
       loadArticles();
-      loadCachedSummary();
     }
   }, [user]);
 
-  const loadCachedSummary = async () => {
+  useEffect(() => {
+    if (user) {
+      loadCachedSummary(selectedDate);
+    }
+  }, [user, selectedDate]);
+
+  const loadCachedSummary = async (date: Date) => {
     setSummaryLoading(true);
+    setBriefSummary(null);
     try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
       const { data } = await supabase
         .from("executive_summaries")
         .select("summary")
         .eq("user_id", user!.id)
+        .gte("created_at", startOfDay.toISOString())
+        .lte("created_at", endOfDay.toISOString())
         .order("created_at", { ascending: false })
         .limit(1)
         .single();
