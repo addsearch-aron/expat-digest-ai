@@ -215,13 +215,63 @@ export default function DailyBriefPage() {
         {viewMode === "summary" && articles.length > 0 && (
           <Card className="border-0 overflow-hidden" style={{ boxShadow: 'var(--shadow-elevated)' }}>
             <div className="h-1 w-full" style={{ background: 'var(--gradient-hero)' }} />
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-3 space-y-3">
               <CardTitle className="text-xl flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center">
                   <Sparkles className="h-4 w-4 text-accent-foreground" />
                 </div>
                 Executive Briefing
               </CardTitle>
+              {/* Day navigation */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-lg"
+                    disabled={isSameDay(selectedDate, last7Days[last7Days.length - 1])}
+                    onClick={() => {
+                      const idx = last7Days.findIndex(d => isSameDay(d, selectedDate));
+                      if (idx < last7Days.length - 1) setSelectedDate(last7Days[idx + 1]);
+                    }}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">{formatDayLabel(selectedDate)}</span>
+                    {isSameDay(selectedDate, today) && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-md">Today</Badge>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-lg"
+                    disabled={isSameDay(selectedDate, today)}
+                    onClick={() => {
+                      const idx = last7Days.findIndex(d => isSameDay(d, selectedDate));
+                      if (idx > 0) setSelectedDate(last7Days[idx - 1]);
+                    }}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex justify-center gap-1">
+                  {[...last7Days].reverse().map((day) => (
+                    <button
+                      key={day.toISOString()}
+                      onClick={() => setSelectedDate(day)}
+                      className={`h-7 w-7 rounded-full text-xs font-medium transition-all duration-200 ${
+                        isSameDay(day, selectedDate)
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      {DAY_ABBREVS[day.getDay()]}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {summaryLoading ? (
