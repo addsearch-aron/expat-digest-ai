@@ -149,9 +149,9 @@ async function batchSummarize(articles: { title: string; content: string }[]): P
     `Article ${i + 1}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content)}`
   ).join('\n\n---\n\n');
 
-  const prompt = `Summarize each article below in exactly 3 concise bullet points. Only include information explicitly present. No hallucinations.
+  const prompt = `Summarize each article below in a single concise paragraph (2-3 sentences). Only include information explicitly present. No hallucinations.
 
-Return a JSON object with key "summaries" containing an array of arrays (each inner array has 3 bullet point strings). Return exactly ${articles.length} results in order.
+Return a JSON object with key "summaries" containing an array of arrays, where each inner array has exactly 1 string (the paragraph summary). Return exactly ${articles.length} results in order.
 
 ${articleDescriptions}`;
 
