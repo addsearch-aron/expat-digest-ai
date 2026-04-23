@@ -125,7 +125,8 @@ Return a JSON object with this format:
 
 async function evaluateTranslation(articles: any[]): Promise<any> {
   const translated = articles.filter(a => a.is_translated && a.translated_summary?.length > 0);
-  const sample = translated.slice(0, 20);
+  const shuffled = [...translated].sort(() => Math.random() - 0.5);
+  const sample = shuffled.slice(0, 10);
   const results: any[] = [];
 
   for (const article of sample) {
@@ -169,8 +170,10 @@ Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "exp
 
 async function evaluateClassification(): Promise<any> {
   const results: { expected: string; predicted: string; correct: boolean }[] = [];
+  const shuffled = [...EVAL_DATASET].sort(() => Math.random() - 0.5);
+  const sample = shuffled.slice(0, 10);
 
-  for (const item of EVAL_DATASET) {
+  for (const item of sample) {
     const prompt = `Classify the following article into exactly one of these topics: ${TOPICS.join(", ")}.
 Return ONLY the topic name, nothing else.
 
@@ -233,11 +236,14 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header");
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+    if (!supabaseUrl || !serviceKey || !anonKey) {
+      throw new Error("Missing Supabase env vars");
+    }
+    const supabase = createClient(supabaseUrl, serviceKey);
+    const anonClient = createClient(supabaseUrl, anonKey);
     const { data: { user }, error: authError } = await anonClient.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) throw new Error("Unauthorized");
 
