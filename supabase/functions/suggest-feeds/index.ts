@@ -114,13 +114,33 @@ async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
     // Match links that look like RSS/Atom endpoints.
     const urlRe = /https?:\/\/[^\s"'<>]+?(?:\/(?:rss|feed|atom|feeds)(?:[\/.][^\s"'<>]*)?|\.(?:rss|atom|xml)(?:\?[^\s"'<>]*)?)/gi;
     const found = new Map<string, FeedspotCandidate>();
-    const matches = html.match(urlRe) || [];
-    for (const m of matches) {
-      const clean = m.replace(/[)\].,;]+$/, "");
-      // Skip Feedspot's own asset/tracking URLs
+    // Strip HTML tags to plain text for heading lookup, but use indexed matching on raw HTML.
+    let m: RegExpExecArray | null;
+    const headingRe = /<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>|<a[^>]*>([\s\S]*?)<\/a>/gi;
+    while ((m = urlRe.exec(html)) !== null) {
+      const raw = m[0];
+      const idx = m.index;
+      const clean = raw.replace(/[)\].,;]+$/, "");
       if (/feedspot\.com|fonts\.|googleapis|gstatic|cdn\.|\.css|\.js$|\.png$|\.jpg$|\.svg$|\.ico$/i.test(clean)) continue;
       if (clean.length > 300) continue;
-      if (!found.has(clean)) found.set(clean, { url: clean });
+      if (found.has(clean)) continue;
+
+      // Look back up to 800 chars for the nearest heading or anchor text — that's the publisher.
+      const windowStart = Math.max(0, idx - 800);
+      const windowHtml = html.slice(windowStart, idx);
+      headingRe.lastIndex = 0;
+      let lastText: string | undefined;
+      let hm: RegExpExecArray | null;
+      while ((hm = headingRe.exec(windowHtml)) !== null) {
+        const text = (hm[1] || hm[2] || "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (text && text.length >= 2 && text.length <= 120 && !/^(rss|feed|subscribe|home|next|prev)$/i.test(text)) {
+          lastText = text;
+        }
+      }
+      found.set(clean, { url: clean, publisher: lastText });
     }
     const extracted = Array.from(found.values());
     console.log(`Feedspot ${slug}: extracted ${extracted.length} candidates`);
