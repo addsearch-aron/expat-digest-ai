@@ -94,7 +94,7 @@ async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
   const url = `https://rss.feedspot.com/${slug}_news_rss_feeds/`;
   try {
     const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 4000);
+    const timeout = setTimeout(() => ctrl.abort(), 10000);
     const res = await fetch(url, {
       headers: {
         "User-Agent":
@@ -104,7 +104,10 @@ async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
       signal: ctrl.signal,
     });
     clearTimeout(timeout);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.log(`Feedspot ${slug}: ${res.status}`);
+      return [];
+    }
     const html = await res.text();
 
     // Extract candidate feed URLs from the HTML.
@@ -119,8 +122,11 @@ async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
       if (clean.length > 300) continue;
       if (!found.has(clean)) found.set(clean, { url: clean });
     }
-    return Array.from(found.values());
-  } catch {
+    const extracted = Array.from(found.values());
+    console.log(`Feedspot ${slug}: extracted ${extracted.length} candidates`);
+    return extracted;
+  } catch (error) {
+    console.log(`Feedspot ${slug}: ${error instanceof Error ? error.message : "fetch failed"}`);
     return [];
   }
 }
