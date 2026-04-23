@@ -244,6 +244,24 @@ export default function OnboardingPage() {
 
             {step === 3 && (
               <div className="space-y-3">
+                {country && (
+                  <button
+                    type="button"
+                    onClick={() => setSuggestOpen(true)}
+                    className="w-full flex items-center justify-between gap-3 p-3.5 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/5 to-accent/10 hover:from-primary/10 hover:to-accent/20 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          Suggest feeds for {city ? `${city}, ` : ""}{country}
+                        </p>
+                        <p className="text-xs text-muted-foreground">AI-picked, validated local sources</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium text-primary shrink-0">Find local feeds →</span>
+                  </button>
+                )}
                 <div className="flex gap-2">
                   <Input
                     value={newUrl}
@@ -277,6 +295,22 @@ export default function OnboardingPage() {
                 <p className="text-xs text-muted-foreground">
                   Tip: search for "site name + RSS feed" to find URLs.
                 </p>
+                <SuggestFeedsDialog
+                  open={suggestOpen}
+                  onOpenChange={setSuggestOpen}
+                  country={country}
+                  city={city}
+                  language={preferredLanguage}
+                  existingUrls={feeds}
+                  onAdd={(picked) => {
+                    setFeeds((prev) => {
+                      const set = new Set(prev);
+                      picked.forEach((p) => set.add(p.url));
+                      return Array.from(set);
+                    });
+                    toast({ title: `Added ${picked.length} feed${picked.length === 1 ? "" : "s"}` });
+                  }}
+                />
               </div>
             )}
           </div>
