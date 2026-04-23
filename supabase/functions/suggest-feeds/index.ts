@@ -34,6 +34,83 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
+function slugify(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+interface FeedspotCandidate {
+  url: string;
+  publisher?: string;
+}
+
+async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
+  const url = `https://rss.feedspot.com/${slug}_news_rss_feeds/`;
+  try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; ExpatBriefBot/1.0; +https://expat-digest-ai.lovable.app)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+    const html = await res.text();
+
+    // Extract candidate feed URLs from the HTML.
+    // Match links that look like RSS/Atom endpoints.
+    const urlRe = /https?:\/\/[^\s"'<>]+?(?:\/(?:rss|feed|atom|feeds)(?:[\/.][^\s"'<>]*)?|\.(?:rss|atom|xml)(?:\?[^\s"'<>]*)?)/gi;
+    const found = new Map<string, FeedspotCandidate>();
+    const matches = html.match(urlRe) || [];
+    for (const m of matches) {
+      const clean = m.replace(/[)\].,;]+$/, "");
+      // Skip Feedspot's own asset/tracking URLs
+      if (/feedspot\.com|fonts\.|googleapis|gstatic|cdn\.|\.css|\.js$|\.png$|\.jpg$|\.svg$|\.ico$/i.test(clean)) continue;
+      if (clean.length > 300) continue;
+      if (!found.has(clean)) found.set(clean, { url: clean });
+    }
+    return Array.from(found.values());
+  } catch {
+    return [];
+  }
+}
+
+async function fetchFeedspotCandidates(
+  city: string,
+  country: string,
+  language: string,
+): Promise<FeedspotCandidate[]> {
+  const slugs: string[] = [];
+  if (country) slugs.push(slugify(country));
+  if (language && language.toLowerCase() !== "english") slugs.push(slugify(language));
+  if (city) slugs.push(slugify(city));
+
+  const results = await Promise.allSettled(slugs.map((s) => fetchFeedspotPage(s)));
+  const all: FeedspotCandidate[] = [];
+  for (const r of results) {
+    if (r.status === "fulfilled") all.push(...r.value);
+  }
+  // Dedupe by URL, cap at 30
+  const seen = new Set<string>();
+  const out: FeedspotCandidate[] = [];
+  for (const c of all) {
+    if (seen.has(c.url)) continue;
+    seen.add(c.url);
+    out.push(c);
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+
 async function validateFeed(url: string): Promise<"valid" | "invalid" | "unreachable"> {
   try {
     const ctrl = new AbortController();
