@@ -167,13 +167,45 @@ export default function OnboardingPage() {
           {/* Content */}
           <div className="p-6">
             {step === 0 && (
-              <Input
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="e.g. Berlin, Tokyo, São Paulo"
-                className="h-11"
-                autoFocus
-              />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Country *</label>
+                  <Select value={country} onValueChange={setCountry}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Select your country" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <div className="p-2 sticky top-0 bg-popover z-10">
+                        <Input
+                          autoFocus
+                          placeholder="Search countries…"
+                          value={countryQuery}
+                          onChange={(e) => setCountryQuery(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          className="h-9"
+                        />
+                      </div>
+                      {filteredCountries.map((c) => (
+                        <SelectItem key={c.code} value={c.name}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                      {filteredCountries.length === 0 && (
+                        <p className="px-3 py-2 text-sm text-muted-foreground">No matches</p>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">City (recommended)</label>
+                  <Input
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g. Berlin, Tokyo, São Paulo"
+                    className="h-11"
+                  />
+                </div>
+              </div>
             )}
 
             {step === 1 && (
