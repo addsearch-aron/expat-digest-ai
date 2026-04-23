@@ -138,21 +138,21 @@ async function evaluateTranslation(articles: any[]): Promise<any> {
   const results: any[] = [];
 
   for (const article of sample) {
-    const originalTitle = article.original_title || article.title;
-    const translatedTitle = article.original_title ? article.title : '';
+    // Only trust original_title if it was actually stored separately. For legacy rows
+    // without it, article.title holds the TRANSLATED title (for is_translated rows),
+    // so we must NOT show it as the original — that would mislead the judge.
+    const hasOriginalTitle = !!article.original_title;
+    const originalTitle = hasOriginalTitle ? article.original_title : '';
+    const translatedTitle = hasOriginalTitle ? article.title : '';
 
     const prompt = `Compare the original article with its translation. Judge whether meaning is preserved.
 
 IMPORTANT: If the original and the translation appear to describe DIFFERENT articles, events, people, places, or topics (i.e. they are not the same story translated), this is a pairing error — return verdict "major distortion" and mention "source/translation appear to be different articles" in the explanation.
 
-Original title: ${originalTitle}
-
-Original summary:
+${originalTitle ? `Original title: ${originalTitle}\n\n` : ''}Original summary:
 ${(article.summary || []).join('\n')}
 
-Translated title: ${translatedTitle}
-
-Translated summary:
+${translatedTitle ? `Translated title: ${translatedTitle}\n\n` : ''}Translated summary:
 ${(article.translated_summary || []).join('\n')}
 
 Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "explanation": "..."}`;
@@ -161,7 +161,7 @@ Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "exp
       const response = await callOpenAI([{ role: "user", content: prompt }], true);
       const parsed = JSON.parse(response);
       results.push({
-        article_title: originalTitle,
+        article_title: originalTitle || translatedTitle || article.title,
         original_title: originalTitle,
         translated_title: translatedTitle,
         article_url: article.url,
