@@ -318,14 +318,17 @@ export default function OnboardingPage() {
 
         {/* Navigation */}
         <div className="flex justify-between items-center">
-          <Button
-            variant="ghost"
-            onClick={() => setStep(s => s - 1)}
-            disabled={step === 0}
-            className="text-muted-foreground"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1.5" /> Back
-          </Button>
+          {step > 0 ? (
+            <Button
+              variant="ghost"
+              onClick={() => setStep(s => s - 1)}
+              className="text-muted-foreground"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1.5" /> Back
+            </Button>
+          ) : (
+            <span />
+          )}
 
           {step < STEPS.length - 1 ? (
             <Button onClick={() => setStep(s => s + 1)} disabled={!canProceed()} className="px-6">
