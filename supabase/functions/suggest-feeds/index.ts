@@ -171,7 +171,7 @@ Think carefully about which real publications cover ${city ? `${city} specifical
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "gpt-4.1",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
