@@ -153,9 +153,7 @@ Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "exp
       results.push({
         article_title: article.title,
         article_url: article.url,
-        original_title: article.title,
         original_summary: article.summary || [],
-        translated_title: article.translated_title || article.title,
         translated_summary: article.translated_summary || [],
         source_language: article.language || '',
         ...parsed,
