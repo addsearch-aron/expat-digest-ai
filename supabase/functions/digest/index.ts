@@ -441,6 +441,7 @@ serve(async (req) => {
       return {
         user_id: userId,
         title: isTranslated && data.translatedTitle ? data.translatedTitle : f.item.title,
+        original_title: f.item.title,
         source: f.item.source,
         url: f.item.url,
         content: stripHtml(f.item.content).slice(0, 1000),

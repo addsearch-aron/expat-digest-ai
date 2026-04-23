@@ -138,10 +138,19 @@ async function evaluateTranslation(articles: any[]): Promise<any> {
   const results: any[] = [];
 
   for (const article of sample) {
-    const prompt = `Compare the original summary with the translation. Judge whether meaning is preserved.
+    const originalTitle = article.original_title || article.title;
+    const translatedTitle = article.original_title ? article.title : '';
+
+    const prompt = `Compare the original article with its translation. Judge whether meaning is preserved.
+
+IMPORTANT: If the original and the translation appear to describe DIFFERENT articles, events, people, places, or topics (i.e. they are not the same story translated), this is a pairing error — return verdict "major distortion" and mention "source/translation appear to be different articles" in the explanation.
+
+Original title: ${originalTitle}
 
 Original summary:
 ${(article.summary || []).join('\n')}
+
+Translated title: ${translatedTitle}
 
 Translated summary:
 ${(article.translated_summary || []).join('\n')}
@@ -152,7 +161,9 @@ Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "exp
       const response = await callOpenAI([{ role: "user", content: prompt }], true);
       const parsed = JSON.parse(response);
       results.push({
-        article_title: article.title,
+        article_title: originalTitle,
+        original_title: originalTitle,
+        translated_title: translatedTitle,
         article_url: article.url,
         original_summary: article.summary || [],
         translated_summary: article.translated_summary || [],
