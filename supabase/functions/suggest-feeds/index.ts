@@ -249,13 +249,24 @@ For each suggestion include:
 - publisher
 
 Important:
-- All URLs are validated server-side, so prefer providing more candidate feeds from real, well-known publishers over withholding. Do not, however, fabricate URLs using generic patterns like /rss or /feed if you have no specific knowledge of that publisher's feed.
+- You will be given a shortlist of candidate feed URLs discovered from a public RSS directory. Prefer selecting URLs from that shortlist exactly as written — they are real-world candidates. You may also add a small number (0-3) of additional well-known feeds you are confident exist.
+- All URLs are validated server-side, so prefer providing more candidates over withholding. Do not, however, fabricate URLs using generic patterns like /rss or /feed if you have no specific knowledge of that publisher's feed.
 - If city-level coverage is limited, use the nearest genuine metro/local outlet rather than promoting national outlets to city level.`;
+
+    // Discover candidate feeds from Feedspot to give the LLM a real shortlist.
+    const feedspotCandidates = await fetchFeedspotCandidates(city, country, language);
+    console.log(`Feedspot returned ${feedspotCandidates.length} candidate URLs`);
+
+    const candidatesBlock = feedspotCandidates.length
+      ? `\n\nCandidate feeds discovered from a public RSS directory (use these as your primary source — select the relevant ones and classify each as city/region/country):\n${feedspotCandidates
+          .map((c) => `- ${c.url}`)
+          .join("\n")}`
+      : "";
 
     const userPrompt = `Suggest RSS feeds for an expat living in ${city ? `${city}, ` : ""}${country}.
 Preferred reading language: ${language}.
 
-Think carefully about which real publications cover ${city ? `${city} specifically (and its region)` : country} and only include feeds whose exact URL you actually know.`;
+Think carefully about which real publications cover ${city ? `${city} specifically (and its region)` : country}. Prefer URLs from the candidate shortlist below; you may also add 0-3 additional well-known feeds you are confident exist.${candidatesBlock}`;
 
     const aiResp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
