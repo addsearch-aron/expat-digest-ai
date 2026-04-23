@@ -328,15 +328,15 @@ For each suggestion include: url, title, level, description, publisher.`;
     console.log(`Feedspot returned ${feedspotCandidates.length} candidate URLs`);
 
     const candidatesBlock = feedspotCandidates.length
-      ? `\n\nCandidate feeds discovered from a public RSS directory (use these as your primary source — select the relevant ones and classify each as city/region/country):\n${feedspotCandidates
-          .map((c) => `- ${c.url}`)
+      ? `\n\nThe shortlist below contains ${feedspotCandidates.length} candidates from a curated public RSS directory. Aim to keep the majority that serve a ${language}-speaking expat audience in ${country}. Each entry shows the publisher (when known) and the feed URL:\n${feedspotCandidates
+          .map((c) => `- ${c.publisher ? `${c.publisher}: ` : ""}${c.url}`)
           .join("\n")}`
       : "";
 
     const userPrompt = `Suggest RSS feeds for an expat living in ${city ? `${city}, ` : ""}${country}.
 Preferred reading language: ${language}.
 
-Think carefully about which real publications cover ${city ? `${city} specifically (and its region)` : country}. Prefer URLs from the candidate shortlist below; you may also add 0-3 additional well-known feeds you are confident exist.${candidatesBlock}`;
+Think about which real publications cover ${city ? `${city} specifically (and its region)` : country}. Default to keeping shortlist entries; add 0-3 additional well-known feeds only if you are confident they exist.${candidatesBlock}`;
 
     const aiResp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
