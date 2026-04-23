@@ -116,7 +116,11 @@ CRITICAL RULES:
 - Only return feeds you are confident actually exist as working RSS/Atom URLs.
 - If you don't know a real, specific feed URL for a publication, OMIT it. Do NOT guess or fabricate URLs.
 - Prefer feeds in the user's preferred language; include 1-2 reputable English-language internationals when relevant (e.g. The Local, Reuters country page, BBC).
-- Aim for ~4 city-level, ~3 regional, ~5 national feeds (12 total).
+- Quantity targets (these are MAXIMUMS, not quotas — never invent feeds to hit a number):
+    * city-level: aim for 3-5 if the city has that many real outlets with known feeds (1-2 is fine for smaller cities)
+    * regional: aim for 4-6
+    * national / country-level: aim for 8-10
+- It is far better to return fewer feeds than to fabricate a single URL. Quality and correctness beat quantity.
 - Each suggestion must include: url (full https URL to the RSS/Atom feed), title (publication name), level (city|region|country), description (one short sentence about what they cover), publisher.`;
 
     const userPrompt = `Suggest RSS feeds for an expat living in ${city ? `${city}, ` : ""}${country}. Preferred language: ${language}.`;
