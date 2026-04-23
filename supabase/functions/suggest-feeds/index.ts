@@ -37,21 +37,49 @@ function checkRateLimit(userId: string): boolean {
 async function validateFeed(url: string): Promise<"valid" | "invalid" | "unreachable"> {
   try {
     const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 5000);
+    const timeout = setTimeout(() => ctrl.abort(), 10000);
     const res = await fetch(url, {
       method: "GET",
       redirect: "follow",
-      headers: { "User-Agent": "ExpatBrief/1.0", Accept: "application/rss+xml, application/xml, text/xml, */*" },
+      headers: {
+        // Many news sites block non-browser UAs with 403/503
+        "User-Agent":
+          "Mozilla/5.0 (compatible; ExpatBriefBot/1.0; +https://expat-digest-ai.lovable.app) Feedfetcher",
+        Accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5",
+        "Accept-Language": "*",
+      },
       signal: ctrl.signal,
     });
     clearTimeout(timeout);
-    if (!res.ok) return "unreachable";
+    // Some servers return 403/406 to bots even when the feed exists. Treat any 4xx/5xx as unreachable but
+    // still try to sniff the body — some return 200 with HTML challenge, some return 403 with feed body.
     const ct = (res.headers.get("content-type") || "").toLowerCase();
-    if (ct.includes("xml") || ct.includes("rss") || ct.includes("atom")) return "valid";
-    // Read a small slice of the body to sniff
-    const text = (await res.text()).slice(0, 512).trimStart().toLowerCase();
-    if (text.startsWith("<?xml") || text.startsWith("<rss") || text.startsWith("<feed")) return "valid";
-    return "invalid";
+    if (res.ok && (ct.includes("xml") || ct.includes("rss") || ct.includes("atom"))) return "valid";
+
+    // Read up to 4KB of the body and look for feed markers anywhere in the snippet (not just at start).
+    let text = "";
+    try {
+      text = (await res.text()).slice(0, 4096).toLowerCase();
+    } catch {
+      return res.ok ? "invalid" : "unreachable";
+    }
+    const trimmed = text.trimStart();
+    if (
+      trimmed.startsWith("<?xml") ||
+      trimmed.startsWith("<rss") ||
+      trimmed.startsWith("<feed") ||
+      // Tag may appear after a BOM, comment, or stylesheet declaration
+      text.includes("<rss ") ||
+      text.includes("<rss>") ||
+      text.includes("<feed ") ||
+      text.includes("<feed>") ||
+      text.includes("<rdf:rss") ||
+      text.includes("xmlns=\"http://www.w3.org/2005/atom\"") ||
+      text.includes("xmlns=\"http://purl.org/rss/")
+    ) {
+      return "valid";
+    }
+    return res.ok ? "invalid" : "unreachable";
   } catch {
     return "unreachable";
   }
