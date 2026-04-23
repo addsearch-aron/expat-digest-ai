@@ -1,61 +1,92 @@
 
 
-## Fix Misaligned Article ↔ Summary/Translation Pairing
+## Location-Based RSS Feed Suggestions
 
-You were right — this is a pairing bug, not a hallucination. The translator did its job correctly; it just got handed the wrong source.
+Add an AI-powered feature that suggests local RSS feeds based on the user's country and city, with live URL validation. Available both as a new step in onboarding and as a button on the Feeds page.
 
-### Root cause
+### 1. Add `country` to user profile
 
-In `supabase/functions/digest/index.ts`, articles are processed in batches of 10 via a single LLM call (`batchSummarize` and `batchSummarizeAndTranslate`). The code blindly trusts that the model returns:
-1. Exactly the same number of results as articles sent
-2. In the same order
+- Migration: `ALTER TABLE profiles ADD COLUMN country text DEFAULT ''`
+- Onboarding step 0 ("Where are you based?") becomes a two-field form: **Country** (searchable dropdown of ~200 countries from a static list) + **City** (free text). Country is required; city stays optional but recommended.
 
-When the model returns a result with one item dropped, merged, or reordered, the loop `batch.forEach((b, j) => articleData.set(b.idx, results[j]))` assigns each article whatever summary/translation sits at the same array index — silently mismatching every article after the first dropped/swapped item.
+### 2. New edge function: `suggest-feeds`
 
-That's why the screenshot shows a Spanish title about "musical brand identity" paired with an English text about "TecnoCampus anthem". Both pieces are real, both are internally consistent — they just belong to two different source articles in the same batch.
+`supabase/functions/suggest-feeds/index.ts`
 
-A second, smaller bug in the eval display: `evaluate/index.ts` reads `article.title`, but for translated articles the stored `title` is already the **translated** title (line 395 of digest). So the eval card's "Original (Spanish)" header sometimes shows English text. We'll fix that too.
+Input: `{ country: string, city?: string, language?: string }`
+Output: `{ feeds: [{ url, title, level: 'city'|'region'|'country', description, status: 'valid'|'invalid'|'unreachable' }] }`
 
-### The fix
+Steps:
+1. Call Lovable AI (`google/gemini-3-flash-preview`) with structured tool-calling schema. Prompt asks for ~12 well-known RSS feeds for the location: ~4 city-level, ~3 regional, ~5 national. Each feed must include `url`, `title`, `level`, `description`, plus the publisher name. System prompt forbids guessing — "if you don't know a real feed, omit it". Prefer feeds in the user's preferred language, but include 1-2 English internationals (e.g. The Local, Reuters country page).
+2. Validate every suggested URL in parallel:
+   - `fetch(url)` with 5s timeout, redirect-follow, `User-Agent: ExpatBrief/1.0`
+   - Check `Content-Type` includes `xml`/`rss`/`atom` OR body starts with `<?xml`/`<rss`/`<feed`
+   - Mark `valid`, `invalid` (200 but not a feed), or `unreachable` (timeout/4xx/5xx)
+3. Return only `valid` feeds to the client (drop the rest, log counts).
+4. Auth: validate JWT, rate-limit to 10 calls/hour/user via in-memory map keyed by user_id.
 
-**1. Anchor batch results by ID, not array index** (`supabase/functions/digest/index.ts`)
+### 3. Onboarding integration
 
-Change both batch prompts to require an `id` field (the index passed in) on every returned result, and look up by that id instead of trusting position:
+In step 3 ("Add news sources"), add a panel **above** the manual URL input:
 
-- Send articles as `Article id=0: ...`, `Article id=1: ...`
-- Require the JSON response to include `id` on each result object
-- Build a `Map<id, result>` and look up `results.find(r => r.id === j)` (or via the map) when assigning back to `batch[j]`
-- If a result is missing for a given id, log a warning and fall back to `[title]` for that article (no silent mis-pairing)
-- Validate `results.length === batch.length`; if not, log it and process only the matched ids
+```text
+┌──────────────────────────────────────────────┐
+│ ✨ Suggest feeds for Berlin, Germany         │
+│  [Find local feeds]                          │
+└──────────────────────────────────────────────┘
+```
 
-This applies to:
-- `batchSummarize` (same-language path)
-- `batchSummarizeAndTranslate` (foreign-language path)
-- `batchClassifyAndDetect` (same risk for classification + language detection)
+After click → loading state → grouped checklist:
 
-**2. Store the original title alongside the translated one** (`supabase/functions/digest/index.ts`)
+```text
+City — Berlin (3)
+  ☑ Berliner Zeitung — Local news, politics
+  ☐ rbb24 Berlin — Public broadcaster
+  ☑ Tagesspiegel — General Berlin daily
 
-Currently `articles.title` holds the translated title for foreign articles, so the eval has no way to show the true original. Add an `original_title` field to the insert payload (always set to `f.item.title`, the source RSS title). No DB migration is strictly required — the `articles` table likely accepts it; we'll confirm and add a column via migration if needed.
+Region (1)
+  ☐ rbb Brandenburg — Regional public radio
 
-**3. Show the true original in the Translation eval** (`supabase/functions/evaluate/index.ts` and `EvaluationPage.tsx`)
+Country — Germany (4)
+  ☑ Deutsche Welle — International news (EN)
+  ☑ Der Spiegel — National weekly
+  ☐ FAZ — National daily
+  ☐ Süddeutsche Zeitung — National daily
+```
 
-- Backend: in `evaluateTranslation`, return `original_title` (from the new column, falling back to `article.title` for legacy rows) and keep `translated_title` separate.
-- Frontend: render "Original" block with `original_title + original_summary`, "Translation" block with `translated_title + translated_summary`. This makes any remaining mis-pairing obvious at a glance.
+Top-2 per group pre-selected. "Add selected" button merges checked URLs into the existing `feeds` state (deduping). User can still add custom URLs manually below.
 
-**4. Add a sanity check in the eval itself** (`supabase/functions/evaluate/index.ts`)
+### 4. Feeds page integration
 
-Extend the judge prompt to also flag *topic mismatch between original and translation* as a possible "major distortion: source/translation appear to be different articles". This surfaces pairing bugs in future runs even if they slip past the code fix.
+Add a third card above "Add RSS Feed":
+
+```text
+┌─────────────────────────────────────────────┐
+│ ✨ Suggest feeds for your location           │
+│ Based on Berlin, Germany                     │
+│              [Suggest feeds]                 │
+└─────────────────────────────────────────────┘
+```
+
+Same suggest-feeds call → modal with the same grouped checklist → bulk insert into `user_feeds` (skipping any URL the user already has).
 
 ### Out of scope
 
-- No retroactive fix of currently-stored mis-paired articles (they roll off via the 2-day retention; next digest run uses the fixed code)
-- No change to thin-source handling — that fix from earlier stays as-is
-- No change to classification accuracy logic, only the batch-pairing safety
+- Region as a separate input field (we let the AI infer region from country+city)
+- Geocoding / autocomplete for the city field
+- Automatic re-suggestion when the user moves cities (button is always there)
+- Persisting "rejected" suggestions (future runs may show them again)
 
-### Files changed
+### Files
 
-- `supabase/functions/digest/index.ts` — id-anchored batch pairing in all three batch helpers; store `original_title`
-- `supabase/functions/evaluate/index.ts` — return original title; add pairing-mismatch hint to judge prompt
-- `src/pages/EvaluationPage.tsx` — render original title above original summary in Translation detail card
-- `supabase/migrations/` — add `original_title text` column to `articles` if not already present
+**New**
+- `supabase/functions/suggest-feeds/index.ts` — AI + validation
+- `supabase/migrations/<timestamp>_add_country_to_profiles.sql`
+- `src/lib/countries.ts` — static country list (~200 entries)
+- `src/components/SuggestFeedsDialog.tsx` — shared grouped-checklist UI used by both pages
+
+**Edited**
+- `src/pages/OnboardingPage.tsx` — country dropdown in step 0; suggest panel in step 3
+- `src/pages/FeedsPage.tsx` — suggest card + dialog
+- `src/integrations/supabase/types.ts` — auto-regenerated for new column
 
