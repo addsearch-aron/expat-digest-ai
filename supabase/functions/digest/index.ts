@@ -149,7 +149,7 @@ async function batchSummarize(articles: { title: string; content: string }[]): P
     `Article ${i + 1}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content)}`
   ).join('\n\n---\n\n');
 
-  const prompt = `Summarize each article below in a single concise paragraph (2-3 sentences). Only include information explicitly present. No hallucinations.
+  const prompt = `Summarize each article below in a single concise paragraph (2-3 sentences). Only include information explicitly present in the article content. Do NOT add facts, names, dates, numbers, or context not present. If the content is sparse or only a title, return a single sentence based ONLY on what's there — do not invent details.
 
 Return a JSON object with key "summaries" containing an array of arrays, where each inner array has exactly 1 string (the paragraph summary). Return exactly ${articles.length} results in order.
 
@@ -174,8 +174,8 @@ async function batchSummarizeAndTranslate(
   ).join('\n\n---\n\n');
 
   const prompt = `For each article below:
-1. Summarize it in a single concise paragraph (2-3 sentences) in the original language. Only include information explicitly present.
-2. Translate the title and the summary paragraph to ${targetLang}.
+1. Summarize it in a single concise paragraph (2-3 sentences) in the original language. Only include information explicitly present in the article content. Do NOT add facts, names, dates, numbers, or context not present. If the source is sparse or only a title, return one short sentence based ONLY on what's there — do not invent details.
+2. Translate the title and the summary paragraph to ${targetLang}. Translate ONLY what is in the source. Do NOT add facts, names, dates, numbers, or context not present in the input. If the source is a single sentence, output a single sentence. Do not expand. If the summary is just a restatement of the title, the translated summary should also be just a restatement of the translated title — do not invent a longer summary.
 
 Return a JSON object with key "results" containing an array of objects, each with:
 - "summary": array with 1 string (the paragraph summary in original language)
@@ -326,10 +326,32 @@ serve(async (req) => {
     const PROCESS_BATCH = 10;
     const articleData: Map<number, { summary: string[]; translatedTitle?: string; translatedSummary?: string[] }> = new Map();
 
+    // Thin-source threshold: articles with content shorter than this skip the LLM entirely
+    // to avoid hallucinated summaries/translations from sparse RSS items.
+    const THIN_CONTENT_CHARS = 200;
+
+    // Pre-fill thin articles: use title as summary (no LLM call = no invention)
+    const thinSameLang = sameLanguage.filter(b => stripHtml(b.item.content).length < THIN_CONTENT_CHARS);
+    const richSameLang = sameLanguage.filter(b => stripHtml(b.item.content).length >= THIN_CONTENT_CHARS);
+    const thinForeign = foreignLanguage.filter(b => stripHtml(b.item.content).length < THIN_CONTENT_CHARS);
+    const richForeign = foreignLanguage.filter(b => stripHtml(b.item.content).length >= THIN_CONTENT_CHARS);
+
+    for (const b of thinSameLang) {
+      articleData.set(b.idx, { summary: [b.item.title] });
+    }
+    for (const b of thinForeign) {
+      // No translation: surface the original title as both summary and translated_summary placeholder.
+      // is_translated will end up false because translatedSummary is empty.
+      articleData.set(b.idx, { summary: [b.item.title] });
+    }
+    if (thinSameLang.length + thinForeign.length > 0) {
+      console.log(`[digest] Skipped LLM for ${thinSameLang.length + thinForeign.length} thin articles (<${THIN_CONTENT_CHARS} chars)`);
+    }
+
     // Build tasks for same-language articles (summarize only)
     const summarizeTasks: (() => Promise<void>)[] = [];
-    for (let i = 0; i < sameLanguage.length; i += PROCESS_BATCH) {
-      const batch = sameLanguage.slice(i, i + PROCESS_BATCH);
+    for (let i = 0; i < richSameLang.length; i += PROCESS_BATCH) {
+      const batch = richSameLang.slice(i, i + PROCESS_BATCH);
       summarizeTasks.push(async () => {
         const summaries = await batchSummarize(batch.map(b => ({ title: b.item.title, content: b.item.content })));
         batch.forEach((b, j) => {
@@ -340,8 +362,8 @@ serve(async (req) => {
 
     // Build tasks for foreign-language articles (summarize + translate in one call)
     const translateTasks: (() => Promise<void>)[] = [];
-    for (let i = 0; i < foreignLanguage.length; i += PROCESS_BATCH) {
-      const batch = foreignLanguage.slice(i, i + PROCESS_BATCH);
+    for (let i = 0; i < richForeign.length; i += PROCESS_BATCH) {
+      const batch = richForeign.slice(i, i + PROCESS_BATCH);
       translateTasks.push(async () => {
         const results = await batchSummarizeAndTranslate(
           batch.map(b => ({ title: b.item.title, content: b.item.content })),

@@ -62,6 +62,19 @@ function ComparisonBlock({ leftLabel, leftContent, rightLabel, rightContent }: {
   );
 }
 
+const THIN_SOURCE_CHARS = 200;
+
+function ThinSourceChip() {
+  return (
+    <Badge
+      variant="outline"
+      className="bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30"
+    >
+      Thin source
+    </Badge>
+  );
+}
+
 export default function EvaluationPage() {
   const { session } = useAuth();
   const { toast } = useToast();
@@ -112,9 +125,12 @@ export default function EvaluationPage() {
               <CollapsibleContent className="space-y-4 pt-3">
                 {d.details.map((item: any, i: number) => (
                   <div key={i} className="rounded-xl border border-border/50 p-4 space-y-3 bg-card">
-                    <p className="font-semibold text-sm">{item.article_title}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-semibold text-sm flex-1">{item.article_title}</p>
+                      {typeof item.original_content_length === 'number' && item.original_content_length < THIN_SOURCE_CHARS && <ThinSourceChip />}
+                    </div>
                     <ComparisonBlock
-                      leftLabel="Original content"
+                      leftLabel={`Original content${typeof item.original_content_length === 'number' ? ` (${item.original_content_length} chars)` : ''}`}
                       leftContent={item.original_content || '—'}
                       rightLabel="Generated summary"
                       rightContent={(item.generated_summary || []).map((b: string, k: number) => <p key={k}>• {b}</p>)}
@@ -161,10 +177,13 @@ export default function EvaluationPage() {
                   <div key={i} className="rounded-xl border border-border/50 p-4 space-y-3 bg-card">
                     <div className="flex items-start justify-between gap-3">
                       <p className="font-semibold text-sm flex-1">{item.article_title}</p>
-                      <VerdictBadge verdict={item.verdict} />
+                      <div className="flex items-center gap-2 shrink-0">
+                        {typeof item.original_content_length === 'number' && item.original_content_length < THIN_SOURCE_CHARS && <ThinSourceChip />}
+                        <VerdictBadge verdict={item.verdict} />
+                      </div>
                     </div>
                     <ComparisonBlock
-                      leftLabel={`Original${item.source_language ? ` (${item.source_language})` : ''}`}
+                      leftLabel={`Original${item.source_language ? ` (${item.source_language})` : ''}${typeof item.original_content_length === 'number' ? ` — ${item.original_content_length} chars` : ''}`}
                       leftContent={(item.original_summary || []).join('\n')}
                       rightLabel="Translation"
                       rightContent={(item.translated_summary || []).join('\n')}

@@ -100,6 +100,7 @@ Return a JSON object with this format:
         article_title: article.title,
         article_url: article.url,
         original_content: (article.content || '').slice(0, 800),
+        original_content_length: (article.content || '').length,
         generated_summary: summary,
         evaluation: parsed.bullets || [],
         overall_explanation: parsed.overall_explanation || '',
@@ -156,6 +157,7 @@ Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "exp
         original_summary: article.summary || [],
         translated_summary: article.translated_summary || [],
         source_language: article.language || '',
+        original_content_length: (article.content || '').length,
         ...parsed,
       });
     } catch (e) {
