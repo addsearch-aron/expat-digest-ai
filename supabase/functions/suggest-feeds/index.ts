@@ -158,7 +158,7 @@ Rules:
 - Avoid niche blogs, topic-specific feeds, and aggregators unless they are highly relevant to expats.
 
 Quantity targets:
-- city: 2-3
+- city: 0-2
 - region: 3-5
 - country: 5-10
 
@@ -170,9 +170,16 @@ For each suggestion include:
 - publisher
 
 Important:
-- Prefer recall over extreme conservatism, because all URLs will be live-validated later.
-- Still avoid obvious guessing.
-- If city-level coverage is limited, use the nearest genuine metro/local outlet rather than promoting national outlets to city level.`;
+- Prefer precision over recall: it is better to return fewer high-confidence feeds than many guessed URLs.
+- If city-level coverage is limited, use the nearest genuine metro/local outlet rather than promoting national outlets to city level.
+
+URL confidence rules:
+- Only return RSS URLs you are confident exist exactly as written.
+- Do NOT construct or guess RSS URLs using common patterns (e.g. /rss/, /feed/, /xml).
+- If you are unsure of the exact feed URL, omit the entry.
+- Prefer well-known publishers and top-level feeds.
+- Avoid obscure local outlets unless the RSS URL is known with high confidence.
+- City-level feeds are optional and should only be included if clearly known.`;
 
     const userPrompt = `Suggest RSS feeds for an expat living in ${city ? `${city}, ` : ""}${country}.
 Preferred reading language: ${language}.
