@@ -1,33 +1,35 @@
 
 
-## Loosen prompt for `suggest-feeds` to improve recall
+## Tighten `suggest-feeds` prompt: confidence-first, fewer city feeds
 
-Replace the current strict prompt in `supabase/functions/suggest-feeds/index.ts` with the user-supplied version. Server-side URL validation already filters bad results, so allowing the model to be slightly more permissive should raise valid-feed yield without lowering quality.
+Update the system prompt in `supabase/functions/suggest-feeds/index.ts` to require high URL confidence and lower city quantity targets.
 
 ### Changes
 
 **File:** `supabase/functions/suggest-feeds/index.ts`
 
-1. **System prompt** — replace existing string with the new one:
-   - Frames model as expert on local/regional/national outlets.
-   - Defines `city` / `region` / `country` levels explicitly.
-   - Allows "reasonably likely" URLs since validation happens server-side.
-   - Keeps quantity targets: city 2-3, region 3-5, country 5-10.
-   - Keeps at most 1-2 English sources for expats.
-   - Adds guidance to fall back to nearest real metro outlet rather than promoting national feeds to city level.
+1. **Quantity targets** — update:
+   - city: **0-2** (was 2-3)
+   - region: 3-5 (unchanged)
+   - country: 5-10 (unchanged)
 
-2. **User prompt** — keep current template (city, country, language interpolation). No change needed since the system prompt now carries the location context wording.
+2. **Add a new "URL confidence" rules block** to the system prompt:
+   - Only return RSS URLs you are confident exist exactly as written.
+   - Do NOT construct or guess RSS URLs using common patterns (e.g. `/rss/`, `/feed/`, `/xml`).
+   - If unsure of the exact feed URL, omit the entry.
+   - Prefer well-known publishers and top-level feeds.
+   - Avoid obscure local outlets unless the RSS URL is known with high confidence.
+   - City-level feeds are optional and should only be included if clearly known.
 
-3. **Tool schema** — unchanged: `{ feeds: [{ url, title, level, description, publisher }] }`.
+3. **Reconcile with prior "recall over conservatism" line** — remove or soften the existing "Prefer recall over extreme conservatism" guidance, since it directly contradicts the new confidence-first rules. Replace with: "Prefer precision over recall: it is better to return fewer high-confidence feeds than many guessed URLs."
 
-4. **Validation, model (`gpt-4.1`), auth, rate limiting** — all unchanged.
-
-### Out of scope
-- Two-pass prompting (deferred)
-- Debug query param (deferred)
-- Model swap or validator changes
+### Unchanged
+- User prompt template (city/country/language interpolation)
+- Tool schema (`feeds: [{ url, title, level, description, publisher }]`)
+- Model (`gpt-4.1`), auth, rate limiting, server-side validation
 
 ### Expected impact
-- Slightly more candidates per request (especially regional and national), most of which should pass validation.
-- City-level results still constrained by reality for small towns like Sitges, but national/regional yield should improve noticeably.
+- Fewer total suggestions, especially at city level for small towns like Sitges.
+- Higher proportion of returned URLs should pass server-side validation.
+- Trade-off accepted: lower yield, higher trust per result.
 
