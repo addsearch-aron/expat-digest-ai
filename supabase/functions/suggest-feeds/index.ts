@@ -114,13 +114,33 @@ async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
     // Match links that look like RSS/Atom endpoints.
     const urlRe = /https?:\/\/[^\s"'<>]+?(?:\/(?:rss|feed|atom|feeds)(?:[\/.][^\s"'<>]*)?|\.(?:rss|atom|xml)(?:\?[^\s"'<>]*)?)/gi;
     const found = new Map<string, FeedspotCandidate>();
-    const matches = html.match(urlRe) || [];
-    for (const m of matches) {
-      const clean = m.replace(/[)\].,;]+$/, "");
-      // Skip Feedspot's own asset/tracking URLs
+    // Strip HTML tags to plain text for heading lookup, but use indexed matching on raw HTML.
+    let m: RegExpExecArray | null;
+    const headingRe = /<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>|<a[^>]*>([\s\S]*?)<\/a>/gi;
+    while ((m = urlRe.exec(html)) !== null) {
+      const raw = m[0];
+      const idx = m.index;
+      const clean = raw.replace(/[)\].,;]+$/, "");
       if (/feedspot\.com|fonts\.|googleapis|gstatic|cdn\.|\.css|\.js$|\.png$|\.jpg$|\.svg$|\.ico$/i.test(clean)) continue;
       if (clean.length > 300) continue;
-      if (!found.has(clean)) found.set(clean, { url: clean });
+      if (found.has(clean)) continue;
+
+      // Look back up to 800 chars for the nearest heading or anchor text — that's the publisher.
+      const windowStart = Math.max(0, idx - 800);
+      const windowHtml = html.slice(windowStart, idx);
+      headingRe.lastIndex = 0;
+      let lastText: string | undefined;
+      let hm: RegExpExecArray | null;
+      while ((hm = headingRe.exec(windowHtml)) !== null) {
+        const text = (hm[1] || hm[2] || "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (text && text.length >= 2 && text.length <= 120 && !/^(rss|feed|subscribe|home|next|prev)$/i.test(text)) {
+          lastText = text;
+        }
+      }
+      found.set(clean, { url: clean, publisher: lastText });
     }
     const extracted = Array.from(found.values());
     console.log(`Feedspot ${slug}: extracted ${extracted.length} candidates`);
@@ -274,56 +294,49 @@ Deno.serve(async (req) => {
 
     const systemPrompt = `You are an expert on local, regional, and national news outlets worldwide.
 
-Your task is to suggest useful RSS/Atom feed URLs for an expat living in ${city ? `${city}, ` : ""}${country}, in ${language}.
+Your task is to assemble a list of useful RSS/Atom feeds for an expat living in ${city ? `${city}, ` : ""}${country}, reading in ${language}.
 
-Return only feeds from real, reputable publications that are geographically relevant to the user:
+Geographic levels:
 - city = primarily covers this city or its metro area
 - region = covers the broader state/province/Land/autonomous region
 - country = national coverage
 
-Rules:
-- Prefer well-known local dailies, regional broadcasters, national public broadcasters, major newspapers, and reputable digital natives.
-- Prefer feeds in the user's preferred language.
-- Include at most 1-2 reputable English-language sources if genuinely useful to expats.
-- Do not invent publications.
-- Do not fabricate obviously fake feed URLs.
-- If a publication is real and the feed URL is reasonably likely but not certain, it may still be included because URLs will be validated server-side.
-- Prioritize geographic relevance and publication quality over quantity.
-- Avoid niche blogs, topic-specific feeds, and aggregators unless they are highly relevant to expats.
+You will receive a shortlist of candidate feeds discovered from a curated public RSS directory. Treat these as **pre-vetted real publishers**. Your job is to:
+(a) **Keep every shortlist candidate that plausibly serves a ${language}-speaking expat in ${country}** — when in doubt, keep it. URLs are validated server-side, so the validator drops broken ones.
+(b) Drop only obvious non-news entries: podcasts unrelated to news, single-topic hobby blogs (cooking, sports-team-only, etc.), defunct sites, or feeds clearly outside ${country}.
+(c) Classify each kept entry as city / region / country.
+(d) You may add 0-3 additional well-known feeds you are confident exist (e.g. major national broadcasters with stable RSS endpoints).
 
-Quantity targets:
+Quantity targets (these are minimums, not caps):
 - city: 1-3
-- region: 3-5
-- country: 5-10
+- region: 3-6
+- country: 6-15
 
-For country-level feeds, prioritize major national publishers and public broadcasters (e.g. national newspapers of record, the country's public radio/TV broadcaster, established wire services). These typically have well-known, stable RSS endpoints.
+If the shortlist contains more relevant publishers than the target range, **return more — do not artificially cap**. The user benefits from breadth.
 
-For each suggestion include:
-- url
-- title
-- level
-- description
-- publisher
+Quality filtering applies primarily to feeds you add yourself, not to shortlist entries. For shortlist candidates, default to keeping.
 
-Important:
-- You will be given a shortlist of candidate feed URLs discovered from a public RSS directory. Prefer selecting URLs from that shortlist exactly as written — they are real-world candidates. You may also add a small number (0-3) of additional well-known feeds you are confident exist.
-- All URLs are validated server-side, so prefer providing more candidates over withholding. Do not, however, fabricate URLs using generic patterns like /rss or /feed if you have no specific knowledge of that publisher's feed.
-- If city-level coverage is limited, use the nearest genuine metro/local outlet rather than promoting national outlets to city level.`;
+Other rules:
+- Prefer feeds in the user's preferred language, but include 1-2 reputable English-language sources if useful for expats.
+- Do not invent publications or fabricate URLs using generic patterns like /rss or /feed without specific knowledge.
+- If city-level coverage is limited, use the nearest genuine metro/local outlet rather than promoting national outlets to city level.
+
+For each suggestion include: url, title, level, description, publisher.`;
 
     // Discover candidate feeds from Feedspot to give the LLM a real shortlist.
     const feedspotCandidates = await fetchFeedspotCandidates(city, country, language);
     console.log(`Feedspot returned ${feedspotCandidates.length} candidate URLs`);
 
     const candidatesBlock = feedspotCandidates.length
-      ? `\n\nCandidate feeds discovered from a public RSS directory (use these as your primary source — select the relevant ones and classify each as city/region/country):\n${feedspotCandidates
-          .map((c) => `- ${c.url}`)
+      ? `\n\nThe shortlist below contains ${feedspotCandidates.length} candidates from a curated public RSS directory. Aim to keep the majority that serve a ${language}-speaking expat audience in ${country}. Each entry shows the publisher (when known) and the feed URL:\n${feedspotCandidates
+          .map((c) => `- ${c.publisher ? `${c.publisher}: ` : ""}${c.url}`)
           .join("\n")}`
       : "";
 
     const userPrompt = `Suggest RSS feeds for an expat living in ${city ? `${city}, ` : ""}${country}.
 Preferred reading language: ${language}.
 
-Think carefully about which real publications cover ${city ? `${city} specifically (and its region)` : country}. Prefer URLs from the candidate shortlist below; you may also add 0-3 additional well-known feeds you are confident exist.${candidatesBlock}`;
+Think about which real publications cover ${city ? `${city} specifically (and its region)` : country}. Default to keeping shortlist entries; add 0-3 additional well-known feeds only if you are confident they exist.${candidatesBlock}`;
 
     const aiResp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
