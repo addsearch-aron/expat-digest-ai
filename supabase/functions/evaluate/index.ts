@@ -157,9 +157,21 @@ ${(article.translated_summary || []).join('\n')}
 
 Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "explanation": "..."}`;
 
-    try {
-      const response = await callOpenAI([{ role: "user", content: prompt }], true);
-      const parsed = JSON.parse(response);
+    // Retry once on transient errors (rate-limit, JSON parse failure, network blips)
+    // so the sample size stays at 10. If both attempts fail, push a placeholder row
+    // marked as "error" so the user sees what happened instead of silent shrinkage.
+    let parsed: any = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
+      try {
+        const response = await callOpenAI([{ role: "user", content: prompt }], true);
+        parsed = JSON.parse(response);
+      } catch (e) {
+        lastError = e;
+        console.error(`Translation eval error (attempt ${attempt + 1}):`, e);
+      }
+    }
+    if (parsed) {
       results.push({
         article_title: originalTitle || translatedTitle || article.title,
         original_title: originalTitle,
@@ -171,26 +183,42 @@ Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "exp
         original_content_length: (article.content || '').length,
         ...parsed,
       });
-    } catch (e) {
-      console.error("Translation eval error:", e);
+    } else {
+      results.push({
+        article_title: originalTitle || translatedTitle || article.title,
+        original_title: originalTitle,
+        translated_title: translatedTitle,
+        article_url: article.url,
+        original_summary: article.summary || [],
+        translated_summary: article.translated_summary || [],
+        source_language: article.language || '',
+        original_content_length: (article.content || '').length,
+        verdict: 'error',
+        explanation: `Judge call failed after 2 attempts: ${lastError instanceof Error ? lastError.message : 'unknown error'}`,
+      });
     }
   }
 
-  let accurate = 0, minor = 0, major = 0;
+  let accurate = 0, minor = 0, major = 0, errored = 0;
   for (const r of results) {
     if (r.verdict === "accurate") accurate++;
     else if (r.verdict === "minor issues") minor++;
-    else major++;
+    else if (r.verdict === "major distortion") major++;
+    else errored++;
   }
-  const total = results.length;
+  // Exclude errored rows from percentages so the model isn't penalised for infra failures,
+  // but keep them in `details` so they're visible in the UI.
+  const judged = accurate + minor + major;
 
   return {
     details: results,
     summary: {
-      total,
-      accurate_pct: total ? Math.round((accurate / total) * 100) : 0,
-      minor_pct: total ? Math.round((minor / total) * 100) : 0,
-      major_pct: total ? Math.round((major / total) * 100) : 0,
+      total: results.length,
+      judged,
+      errored,
+      accurate_pct: judged ? Math.round((accurate / judged) * 100) : 0,
+      minor_pct: judged ? Math.round((minor / judged) * 100) : 0,
+      major_pct: judged ? Math.round((major / judged) * 100) : 0,
     }
   };
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -36,16 +36,18 @@ function VerdictBadge({ verdict }: { verdict: string }) {
   return <Badge variant="outline" className={`${cls} capitalize`}>{label}</Badge>;
 }
 
-function DetailsToggle({ count, open }: { count: number; open: boolean }) {
-  return (
-    <CollapsibleTrigger asChild>
-      <Button variant="ghost" size="sm" className="w-full justify-between mt-4 text-sm">
-        <span>View details ({count} item{count === 1 ? '' : 's'})</span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </Button>
-    </CollapsibleTrigger>
-  );
-}
+const DetailsToggle = forwardRef<HTMLButtonElement, { count: number; open: boolean }>(
+  function DetailsToggle({ count, open }, ref) {
+    return (
+      <CollapsibleTrigger asChild>
+        <Button ref={ref} variant="ghost" size="sm" className="w-full justify-between mt-4 text-sm">
+          <span>View details ({count} item{count === 1 ? '' : 's'})</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </Button>
+      </CollapsibleTrigger>
+    );
+  }
+);
 
 function ComparisonBlock({ leftLabel, leftContent, rightLabel, rightContent }: { leftLabel: string; leftContent: React.ReactNode; rightLabel: string; rightContent: React.ReactNode }) {
   return (
@@ -168,7 +170,10 @@ export default function EvaluationPage() {
           <MetricBar label="Accurate" value={d.summary.accurate_pct} color="" />
           <MetricBar label="Minor Issues" value={d.summary.minor_pct} color="" />
           <MetricBar label="Major Distortion" value={d.summary.major_pct} color="" />
-          <p className="text-xs text-muted-foreground pt-1">Based on {d.summary.total} translated articles</p>
+          <p className="text-xs text-muted-foreground pt-1">
+            Based on {d.summary.judged ?? d.summary.total} judged article{(d.summary.judged ?? d.summary.total) === 1 ? '' : 's'}
+            {d.summary.errored ? ` (${d.summary.errored} skipped due to judge errors)` : ''}
+          </p>
           {Array.isArray(d.details) && d.details.length > 0 && (
             <Collapsible open={!!openDetails.translation} onOpenChange={(o) => setOpenDetails(s => ({ ...s, translation: o }))}>
               <DetailsToggle count={d.details.length} open={!!openDetails.translation} />
