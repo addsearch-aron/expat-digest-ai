@@ -4,8 +4,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { FlaskConical, Loader2, BarChart3, Languages, Target } from "lucide-react";
+import { FlaskConical, Loader2, BarChart3, Languages, Target, ChevronDown, Check, X } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 
 function MetricBar({ label, value, color }: { label: string; value: number; color: string }) {
@@ -20,6 +22,46 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
   );
 }
 
+function VerdictBadge({ verdict }: { verdict: string }) {
+  const v = (verdict || '').toLowerCase();
+  let cls = "bg-muted text-muted-foreground";
+  let label = verdict || 'unknown';
+  if (v.includes('not supported') || v.includes('major')) {
+    cls = "bg-destructive/15 text-destructive border-destructive/30";
+  } else if (v.includes('partial') || v.includes('minor')) {
+    cls = "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30";
+  } else if (v === 'supported' || v === 'accurate') {
+    cls = "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+  }
+  return <Badge variant="outline" className={`${cls} capitalize`}>{label}</Badge>;
+}
+
+function DetailsToggle({ count, open }: { count: number; open: boolean }) {
+  return (
+    <CollapsibleTrigger asChild>
+      <Button variant="ghost" size="sm" className="w-full justify-between mt-4 text-sm">
+        <span>View details ({count} item{count === 1 ? '' : 's'})</span>
+        <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </Button>
+    </CollapsibleTrigger>
+  );
+}
+
+function ComparisonBlock({ leftLabel, leftContent, rightLabel, rightContent }: { leftLabel: string; leftContent: React.ReactNode; rightLabel: string; rightContent: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+      <div className="space-y-1.5">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">{leftLabel}</p>
+        <div className="rounded-lg bg-muted/40 p-3 whitespace-pre-wrap text-foreground/90">{leftContent}</div>
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">{rightLabel}</p>
+        <div className="rounded-lg bg-muted/40 p-3 whitespace-pre-wrap text-foreground/90">{rightContent}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function EvaluationPage() {
   const { session } = useAuth();
   const { toast } = useToast();
@@ -27,6 +69,7 @@ export default function EvaluationPage() {
   const [translation, setTranslation] = useState<any>(null);
   const [classification, setClassification] = useState<any>(null);
   const [loadingType, setLoadingType] = useState<string | null>(null);
+  const [openDetails, setOpenDetails] = useState<Record<string, boolean>>({});
 
   const runEval = async (evalType: string) => {
     setLoadingType(evalType);
@@ -63,6 +106,38 @@ export default function EvaluationPage() {
           <MetricBar label="Partially Supported" value={d.summary.partial_pct} color="" />
           <MetricBar label="Not Supported" value={d.summary.unsupported_pct} color="" />
           <p className="text-xs text-muted-foreground pt-1">Based on {d.summary.total_bullets} bullets</p>
+          {Array.isArray(d.details) && d.details.length > 0 && (
+            <Collapsible open={!!openDetails.faithfulness} onOpenChange={(o) => setOpenDetails(s => ({ ...s, faithfulness: o }))}>
+              <DetailsToggle count={d.details.length} open={!!openDetails.faithfulness} />
+              <CollapsibleContent className="space-y-4 pt-3">
+                {d.details.map((item: any, i: number) => (
+                  <div key={i} className="rounded-xl border border-border/50 p-4 space-y-3 bg-card">
+                    <p className="font-semibold text-sm">{item.article_title}</p>
+                    <ComparisonBlock
+                      leftLabel="Original content"
+                      leftContent={item.original_content || '—'}
+                      rightLabel="Generated summary"
+                      rightContent={(item.generated_summary || []).map((b: string, k: number) => <p key={k}>• {b}</p>)}
+                    />
+                    <div className="space-y-2">
+                      {(item.evaluation || []).map((b: any, k: number) => (
+                        <div key={k} className="flex items-start gap-2 text-sm">
+                          <VerdictBadge verdict={b.verdict} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-foreground/90">{b.bullet}</p>
+                            {b.explanation && <p className="text-xs text-muted-foreground mt-0.5">{b.explanation}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {item.overall_explanation && (
+                      <p className="text-xs text-muted-foreground border-t border-border/50 pt-2">{item.overall_explanation}</p>
+                    )}
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </div>
       ),
     },
@@ -78,6 +153,32 @@ export default function EvaluationPage() {
           <MetricBar label="Minor Issues" value={d.summary.minor_pct} color="" />
           <MetricBar label="Major Distortion" value={d.summary.major_pct} color="" />
           <p className="text-xs text-muted-foreground pt-1">Based on {d.summary.total} translated articles</p>
+          {Array.isArray(d.details) && d.details.length > 0 && (
+            <Collapsible open={!!openDetails.translation} onOpenChange={(o) => setOpenDetails(s => ({ ...s, translation: o }))}>
+              <DetailsToggle count={d.details.length} open={!!openDetails.translation} />
+              <CollapsibleContent className="space-y-4 pt-3">
+                {d.details.map((item: any, i: number) => (
+                  <div key={i} className="rounded-xl border border-border/50 p-4 space-y-3 bg-card">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-semibold text-sm flex-1">{item.article_title}</p>
+                      <VerdictBadge verdict={item.verdict} />
+                    </div>
+                    <ComparisonBlock
+                      leftLabel={`Original${item.source_language ? ` (${item.source_language})` : ''}`}
+                      leftContent={(item.original_summary || []).join('\n')}
+                      rightLabel="Translation"
+                      rightContent={(item.translated_summary || []).join('\n')}
+                    />
+                    {item.explanation && (
+                      <p className="text-xs text-muted-foreground border-t border-border/50 pt-2">
+                        <span className="font-medium text-foreground/70">Judge:</span> {item.explanation}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </div>
       ),
     },
@@ -102,6 +203,41 @@ export default function EvaluationPage() {
           <p className="text-xs text-muted-foreground">
             {d.summary.correct}/{d.summary.total} correct on static evaluation dataset
           </p>
+          {Array.isArray(d.details) && d.details.length > 0 && (
+            <Collapsible open={!!openDetails.classification} onOpenChange={(o) => setOpenDetails(s => ({ ...s, classification: o }))}>
+              <DetailsToggle count={d.details.length} open={!!openDetails.classification} />
+              <CollapsibleContent className="space-y-3 pt-3">
+                {d.details.map((item: any, i: number) => (
+                  <div key={i} className={`rounded-xl border p-4 space-y-2 ${item.correct ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-destructive/30 bg-destructive/5'}`}>
+                    <div className="flex items-start gap-2">
+                      {item.correct
+                        ? <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                        : <X className="h-4 w-4 text-destructive mt-0.5 shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm">{item.article_title}</p>
+                        {item.content_excerpt && <p className="text-xs text-muted-foreground mt-0.5">{item.content_excerpt}</p>}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm pl-6">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Expected</p>
+                        <p className="font-medium">{item.expected}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Predicted</p>
+                        <p className={`font-medium ${item.correct ? '' : 'text-destructive'}`}>{item.predicted}</p>
+                      </div>
+                    </div>
+                    {item.explanation && (
+                      <p className="text-xs text-muted-foreground pl-6">
+                        <span className="font-medium text-foreground/70">Model reasoning:</span> {item.explanation}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </div>
       ),
     },

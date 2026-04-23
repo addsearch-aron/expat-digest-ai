@@ -91,12 +91,19 @@ Summary bullets:
 ${summary.map((b: string, i: number) => `${i + 1}. ${b}`).join('\n')}
 
 Return a JSON object with this format:
-{"bullets": [{"bullet": "...", "verdict": "supported|partially supported|not supported"}]}`;
+{"bullets": [{"bullet": "...", "verdict": "supported|partially supported|not supported", "explanation": "brief reason"}], "overall_explanation": "1-2 sentence overall judgment"}`;
 
     try {
       const response = await callOpenAI([{ role: "user", content: prompt }], true);
       const parsed = JSON.parse(response);
-      results.push({ article_title: article.title, evaluation: parsed.bullets || [] });
+      results.push({
+        article_title: article.title,
+        article_url: article.url,
+        original_content: (article.content || '').slice(0, 800),
+        generated_summary: summary,
+        evaluation: parsed.bullets || [],
+        overall_explanation: parsed.overall_explanation || '',
+      });
     } catch (e) {
       console.error("Faithfulness eval error:", e);
     }
@@ -143,7 +150,14 @@ Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "exp
     try {
       const response = await callOpenAI([{ role: "user", content: prompt }], true);
       const parsed = JSON.parse(response);
-      results.push({ article_title: article.title, ...parsed });
+      results.push({
+        article_title: article.title,
+        article_url: article.url,
+        original_summary: article.summary || [],
+        translated_summary: article.translated_summary || [],
+        source_language: article.language || '',
+        ...parsed,
+      });
     } catch (e) {
       console.error("Translation eval error:", e);
     }
@@ -175,19 +189,23 @@ async function evaluateClassification(): Promise<any> {
 
   for (const item of sample) {
     const prompt = `Classify the following article into exactly one of these topics: ${TOPICS.join(", ")}.
-Return ONLY the topic name, nothing else.
+Return a JSON object: {"topic": "<one of the topics>", "explanation": "1 sentence reason"}.
 
 Title: ${item.title}
 Content: ${item.content}`;
 
     try {
-      const response = await callOpenAI([{ role: "user", content: prompt }]);
-      const predicted = response.trim();
+      const response = await callOpenAI([{ role: "user", content: prompt }], true);
+      const parsed = JSON.parse(response);
+      const predicted = (parsed.topic || '').trim();
       const matched = TOPICS.find(t => predicted.toLowerCase().includes(t.toLowerCase())) || predicted;
       results.push({
+        article_title: item.title,
+        content_excerpt: item.content,
         expected: item.topic,
         predicted: matched,
         correct: matched.toLowerCase() === item.topic.toLowerCase(),
+        explanation: parsed.explanation || '',
       });
     } catch (e) {
       console.error("Classification eval error:", e);
