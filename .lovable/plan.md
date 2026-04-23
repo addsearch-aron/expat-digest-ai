@@ -1,51 +1,40 @@
 
 
-## Add web-search augmentation to `suggest-feeds` (balanced approach)
+## Increase yield: have LLM keep most relevant Feedspot candidates
 
-Augment the LLM-only flow with a real-source discovery step so the model has actual feed URLs to choose from instead of guessing. Target: 4–6 validated feeds per request.
+**Problem:** Feedspot returns 17 candidates for Spanish news, but the LLM picks only 4. The user manually identified 7+ relevant feeds on the same page. The model is over-filtering because (a) candidates are bare URLs with no context, (b) the prompt biases toward caution, and (c) there's no explicit "keep most" instruction.
 
-### Approach: hybrid (Feedspot scrape + LLM filter), no new dependencies
+### Changes — `supabase/functions/suggest-feeds/index.ts` only
 
-1. **Discover candidate feeds from Feedspot** before calling the LLM.
-   - Build slugged URLs from the user's location and language and fetch them server-side from the edge function:
-     - `https://rss.feedspot.com/{country_slug}_news_rss_feeds/`
-     - `https://rss.feedspot.com/{language_slug}_news_rss_feeds/` (e.g. `spanish_news_rss_feeds`)
-     - `https://rss.feedspot.com/{city_slug}_news_rss_feeds/` (only if city provided)
-   - Parse the returned HTML with a lightweight regex pass to extract candidate feed URLs (links matching `https?://[^"'<> ]+(rss|feed|atom|xml|rss\.xml|/feed/)`), plus the publisher name from the surrounding heading text.
-   - Cap at ~30 candidates total, dedupe by URL.
-   - Wrap fetches in `Promise.allSettled` with a 4s timeout; if Feedspot returns 404 or fails, fall back to the existing LLM-only flow gracefully.
+**1. Extract publisher hints from Feedspot HTML, not just URLs.**
+Feedspot list pages have a predictable structure: each entry has a heading (publisher name) followed by the feed link. Update `fetchFeedspotPage` to:
+- Capture the `<h2>`/`<h3>`/`<h4>` text or anchor text near each extracted URL (look back ~500 chars in the HTML for the nearest heading or `<a ...>Name</a>`).
+- Return `{ url, publisher }` with publisher populated when extractable.
+- Pass these to the LLM as `- {publisher}: {url}` lines instead of bare URLs.
 
-2. **Pass candidates to the LLM as a curated shortlist.**
-   - Add a new section to the user prompt: "Here are candidate feeds discovered from a public directory. Select the ones genuinely relevant to {city}/{country} for a {language}-speaking expat, classify each as city/region/country, and add 0–3 additional well-known feeds you know exist."
-   - The LLM's job changes from "recall feed URLs from memory" to "filter and classify a real list" — much higher precision.
-   - Keep quantity targets: city 1–3, region 3–5, country 5–10.
+This gives the LLM enough context to confidently keep entries instead of dropping unknown URLs.
 
-3. **Validate as today.** Existing `validateFeed()` runs unchanged on the LLM's final selection.
+**2. Rewrite shortlist instructions in system prompt to maximize keep-rate.**
+Replace the current "Important" block with:
+> "You will receive a shortlist of candidate feeds discovered from a curated public RSS directory. Treat these as **pre-vetted real publishers**. Your job is to (a) **keep every candidate that plausibly serves a {language}-speaking expat in {country}** — when in doubt, keep it; the validator drops broken URLs. (b) Drop only obvious non-news entries (podcasts unrelated to news, single-topic hobby blogs, defunct sites). (c) Classify each kept entry as city / region / country. (d) You may add 0-3 additional well-known feeds you are confident exist."
 
-### Why Feedspot
+**3. Raise quantity targets to match shortlist size.**
+- city: 1-3 (unchanged)
+- region: 3-6 (was 3-5)
+- country: **6-15** (was 5-10) — when shortlist has 15+ candidates, allow keeping most.
+- Add: "If the shortlist contains more than {target} relevant publishers, return more — do not artificially cap."
 
-- Public, no auth, predictable URL slugs per country/language/city.
-- Each list page contains the actual feed URLs in plain HTML — extractable with one regex pass, no JS rendering needed.
-- For Spain alone: `/spanish_news_rss_feeds/`, `/spain_news_rss_feeds/`, `/madrid_news_rss_feeds/`, `/barcelona_news_rss_feeds/` etc. all exist.
+**4. Soften the "Avoid niche blogs / Prioritize quality over quantity" lines** — these conflict with the goal of keeping shortlist entries. Replace with: "For shortlist candidates, default to keeping. Quality filtering applies primarily to feeds you add yourself."
 
-### File changes
-
-- **`supabase/functions/suggest-feeds/index.ts`** — only file touched.
-  - Add `slugify()` helper (lowercase, spaces→underscores, strip diacritics).
-  - Add `fetchFeedspotCandidates(city, country, language)` returning `{url, publisher}[]`.
-  - Insert candidates into the user prompt before the OpenAI call.
-  - Soften system prompt to acknowledge the shortlist (remove "you actually know" wording from user prompt).
-  - Keep model `gpt-4.1`, validator, auth, rate limit unchanged.
-
-### Out of scope
-
-- Caching Feedspot responses (can add later if rate-limit issues appear).
-- Robots.txt compliance review beyond a basic UA string — Feedspot pages are publicly indexed and we fetch ≤3 pages per user request, well under any reasonable threshold.
-- Switching to a paid search API (Perplexity/Firecrawl) — only worth doing if Feedspot proves insufficient.
+**5. Pass candidate count into the user prompt** so the model sees an explicit expectation:
+> "The shortlist below contains {N} candidates. Aim to keep the majority that serve a {language}-speaking expat audience."
 
 ### Expected impact
+- Spanish/Spain query: 17 candidates → LLM keeps ~10-13 → validator yields 6-10 valid feeds (vs current 4).
+- Small/obscure locations unaffected (shortlist will simply be smaller).
 
-- Spanish/Sitges-class queries: 8–15 real candidate URLs from Feedspot → LLM picks ~6–10 → validator yields 4–6 valid feeds.
-- Big drop in fabricated URLs since the LLM is choosing from a real list, not generating from memory.
-- Adds ~500ms–1.5s latency from the parallel Feedspot fetches; acceptable for the balanced trade-off.
+### Out of scope
+- Caching Feedspot pages.
+- Switching parsing to a real HTML parser (regex with backward-search heading lookup is sufficient).
+- Changing model, validator, auth, or rate-limit logic.
 
