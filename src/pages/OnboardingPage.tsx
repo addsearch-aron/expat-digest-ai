@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { TOPICS, LANGUAGES } from "@/lib/constants";
+import { COUNTRIES } from "@/lib/countries";
+import SuggestFeedsDialog, { type SuggestedFeed } from "@/components/SuggestFeedsDialog";
 import { MapPin, Globe, Tags, Rss, ArrowRight, ArrowLeft, CheckCircle2, Plus, X, Sparkles } from "lucide-react";
 
 const STEPS = [
@@ -36,12 +38,21 @@ export default function OnboardingPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
 
+  const [country, setCountry] = useState("");
+  const [countryQuery, setCountryQuery] = useState("");
   const [city, setCity] = useState("");
   const [preferredLanguage, setPreferredLanguage] = useState("English");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [feeds, setFeeds] = useState<string[]>([]);
   const [newUrl, setNewUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+
+  const filteredCountries = useMemo(() => {
+    const q = countryQuery.trim().toLowerCase();
+    if (!q) return COUNTRIES;
+    return COUNTRIES.filter((c) => c.name.toLowerCase().includes(q));
+  }, [countryQuery]);
 
   const toggleTopic = (topic: string) => {
     setSelectedTopics(prev =>
@@ -65,6 +76,7 @@ export default function OnboardingPage() {
   };
 
   const canProceed = () => {
+    if (step === 0 && !country) return false;
     if (step === 2 && selectedTopics.length === 0) return false;
     if (step === 3 && feeds.length === 0) return false;
     return true;
@@ -77,6 +89,7 @@ export default function OnboardingPage() {
         .from("profiles")
         .update({
           city,
+          country,
           preferred_language: preferredLanguage,
           topics: selectedTopics,
         })
