@@ -64,11 +64,8 @@ export default function SuggestFeedsDialog({
       const existing = new Set(existingUrls);
       const fresh: SuggestedFeed[] = (data?.feeds || []).filter((f: SuggestedFeed) => !existing.has(f.url));
 
-      // Pre-select top 2 per level
-      const preselected = new Set<string>();
-      (["city", "region", "country"] as const).forEach((lvl) => {
-        fresh.filter((f) => f.level === lvl).slice(0, 2).forEach((f) => preselected.add(f.url));
-      });
+      // Pre-select all suggested feeds by default
+      const preselected = new Set<string>(fresh.map((f) => f.url));
 
       setFeeds(fresh);
       setSelected(preselected);
