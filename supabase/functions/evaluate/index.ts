@@ -189,19 +189,23 @@ async function evaluateClassification(): Promise<any> {
 
   for (const item of sample) {
     const prompt = `Classify the following article into exactly one of these topics: ${TOPICS.join(", ")}.
-Return ONLY the topic name, nothing else.
+Return a JSON object: {"topic": "<one of the topics>", "explanation": "1 sentence reason"}.
 
 Title: ${item.title}
 Content: ${item.content}`;
 
     try {
-      const response = await callOpenAI([{ role: "user", content: prompt }]);
-      const predicted = response.trim();
+      const response = await callOpenAI([{ role: "user", content: prompt }], true);
+      const parsed = JSON.parse(response);
+      const predicted = (parsed.topic || '').trim();
       const matched = TOPICS.find(t => predicted.toLowerCase().includes(t.toLowerCase())) || predicted;
       results.push({
+        article_title: item.title,
+        content_excerpt: item.content,
         expected: item.topic,
         predicted: matched,
         correct: matched.toLowerCase() === item.topic.toLowerCase(),
+        explanation: parsed.explanation || '',
       });
     } catch (e) {
       console.error("Classification eval error:", e);
