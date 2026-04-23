@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { TOPICS, LANGUAGES } from "@/lib/constants";
+import { COUNTRIES } from "@/lib/countries";
+import SuggestFeedsDialog, { type SuggestedFeed } from "@/components/SuggestFeedsDialog";
 import { MapPin, Globe, Tags, Rss, ArrowRight, ArrowLeft, CheckCircle2, Plus, X, Sparkles } from "lucide-react";
 
 const STEPS = [
@@ -36,12 +38,21 @@ export default function OnboardingPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
 
+  const [country, setCountry] = useState("");
+  const [countryQuery, setCountryQuery] = useState("");
   const [city, setCity] = useState("");
   const [preferredLanguage, setPreferredLanguage] = useState("English");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [feeds, setFeeds] = useState<string[]>([]);
   const [newUrl, setNewUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+
+  const filteredCountries = useMemo(() => {
+    const q = countryQuery.trim().toLowerCase();
+    if (!q) return COUNTRIES;
+    return COUNTRIES.filter((c) => c.name.toLowerCase().includes(q));
+  }, [countryQuery]);
 
   const toggleTopic = (topic: string) => {
     setSelectedTopics(prev =>
@@ -65,6 +76,7 @@ export default function OnboardingPage() {
   };
 
   const canProceed = () => {
+    if (step === 0 && !country) return false;
     if (step === 2 && selectedTopics.length === 0) return false;
     if (step === 3 && feeds.length === 0) return false;
     return true;
@@ -77,6 +89,7 @@ export default function OnboardingPage() {
         .from("profiles")
         .update({
           city,
+          country,
           preferred_language: preferredLanguage,
           topics: selectedTopics,
         })
@@ -154,13 +167,45 @@ export default function OnboardingPage() {
           {/* Content */}
           <div className="p-6">
             {step === 0 && (
-              <Input
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="e.g. Berlin, Tokyo, São Paulo"
-                className="h-11"
-                autoFocus
-              />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Country *</label>
+                  <Select value={country} onValueChange={setCountry}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Select your country" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <div className="p-2 sticky top-0 bg-popover z-10">
+                        <Input
+                          autoFocus
+                          placeholder="Search countries…"
+                          value={countryQuery}
+                          onChange={(e) => setCountryQuery(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          className="h-9"
+                        />
+                      </div>
+                      {filteredCountries.map((c) => (
+                        <SelectItem key={c.code} value={c.name}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                      {filteredCountries.length === 0 && (
+                        <p className="px-3 py-2 text-sm text-muted-foreground">No matches</p>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">City (recommended)</label>
+                  <Input
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g. Berlin, Tokyo, São Paulo"
+                    className="h-11"
+                  />
+                </div>
+              </div>
             )}
 
             {step === 1 && (
@@ -199,6 +244,24 @@ export default function OnboardingPage() {
 
             {step === 3 && (
               <div className="space-y-3">
+                {country && (
+                  <button
+                    type="button"
+                    onClick={() => setSuggestOpen(true)}
+                    className="w-full flex items-center justify-between gap-3 p-3.5 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/5 to-accent/10 hover:from-primary/10 hover:to-accent/20 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          Suggest feeds for {city ? `${city}, ` : ""}{country}
+                        </p>
+                        <p className="text-xs text-muted-foreground">AI-picked, validated local sources</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium text-primary shrink-0">Find local feeds →</span>
+                  </button>
+                )}
                 <div className="flex gap-2">
                   <Input
                     value={newUrl}
@@ -232,6 +295,22 @@ export default function OnboardingPage() {
                 <p className="text-xs text-muted-foreground">
                   Tip: search for "site name + RSS feed" to find URLs.
                 </p>
+                <SuggestFeedsDialog
+                  open={suggestOpen}
+                  onOpenChange={setSuggestOpen}
+                  country={country}
+                  city={city}
+                  language={preferredLanguage}
+                  existingUrls={feeds}
+                  onAdd={(picked) => {
+                    setFeeds((prev) => {
+                      const set = new Set(prev);
+                      picked.forEach((p) => set.add(p.url));
+                      return Array.from(set);
+                    });
+                    toast({ title: `Added ${picked.length} feed${picked.length === 1 ? "" : "s"}` });
+                  }}
+                />
               </div>
             )}
           </div>

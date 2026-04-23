@@ -116,6 +116,7 @@ export type Database = {
       profiles: {
         Row: {
           city: string | null
+          country: string | null
           created_at: string
           digest_hour: number
           digest_timezone: string
@@ -127,6 +128,7 @@ export type Database = {
         }
         Insert: {
           city?: string | null
+          country?: string | null
           created_at?: string
           digest_hour?: number
           digest_timezone?: string
@@ -138,6 +140,7 @@ export type Database = {
         }
         Update: {
           city?: string | null
+          country?: string | null
           created_at?: string
           digest_hour?: number
           digest_timezone?: string

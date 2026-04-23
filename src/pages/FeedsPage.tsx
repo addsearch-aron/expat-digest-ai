@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Rss } from "lucide-react";
+import { Trash2, Plus, Rss, Sparkles, MapPin } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
+import SuggestFeedsDialog, { type SuggestedFeed } from "@/components/SuggestFeedsDialog";
 
 export default function FeedsPage() {
   const { user } = useAuth();
@@ -14,10 +15,24 @@ export default function FeedsPage() {
   const [feeds, setFeeds] = useState<any[]>([]);
   const [newUrl, setNewUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [profile, setProfile] = useState<{ country?: string; city?: string; preferred_language?: string } | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
 
   useEffect(() => {
-    if (user) loadFeeds();
+    if (user) {
+      loadFeeds();
+      loadProfile();
+    }
   }, [user]);
+
+  const loadProfile = async () => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("country, city, preferred_language")
+      .eq("user_id", user!.id)
+      .maybeSingle();
+    setProfile(data || null);
+  };
 
   const loadFeeds = async () => {
     const { data } = await supabase
@@ -26,6 +41,27 @@ export default function FeedsPage() {
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false });
     setFeeds(data || []);
+  };
+
+  const handleAddSuggested = async (picked: SuggestedFeed[]) => {
+    const existing = new Set(feeds.map((f) => f.feed_url));
+    const toInsert = picked.filter((p) => !existing.has(p.url));
+    if (toInsert.length === 0) {
+      toast({ title: "Already added", description: "All selected feeds are already in your list." });
+      return;
+    }
+    const rows = toInsert.map((p) => ({
+      user_id: user!.id,
+      feed_url: p.url,
+      title: p.title,
+    }));
+    const { error } = await supabase.from("user_feeds").insert(rows);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `Added ${toInsert.length} feed${toInsert.length === 1 ? "" : "s"}` });
+    loadFeeds();
   };
 
   const addFeed = async () => {
@@ -56,6 +92,28 @@ export default function FeedsPage() {
     <AppLayout>
       <div className="max-w-2xl mx-auto space-y-6">
         <h1 className="text-3xl font-bold tracking-tight">My Feeds</h1>
+
+        {profile?.country && (
+          <Card className="border-primary/30 overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
+            <CardContent className="p-5 flex items-center justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">Suggest feeds for your location</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <MapPin className="h-3 w-3" />
+                    {[profile.city, profile.country].filter(Boolean).join(", ")}
+                  </p>
+                </div>
+              </div>
+              <Button onClick={() => setSuggestOpen(true)} className="rounded-xl shrink-0">
+                Suggest feeds
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-border/50 overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
           <CardHeader className="pb-3">
@@ -122,6 +180,18 @@ export default function FeedsPage() {
             )}
           </CardContent>
         </Card>
+
+        {profile?.country && (
+          <SuggestFeedsDialog
+            open={suggestOpen}
+            onOpenChange={setSuggestOpen}
+            country={profile.country}
+            city={profile.city}
+            language={profile.preferred_language}
+            existingUrls={feeds.map((f) => f.feed_url)}
+            onAdd={handleAddSuggested}
+          />
+        )}
       </div>
     </AppLayout>
   );
