@@ -186,7 +186,7 @@ export default function EvaluationPage() {
       key: "classification",
       title: "Topic Classification",
       icon: Target,
-      description: "Tests classifier on 35 pre-labeled articles. Computes accuracy and macro F1.",
+      description: "Tests classifier on 10 randomly sampled articles. Computes accuracy and macro F1.",
       data: classification,
       renderResult: (d: any) => (
         <div className="space-y-4">
