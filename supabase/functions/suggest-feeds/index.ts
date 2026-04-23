@@ -298,13 +298,13 @@ Your task is to assemble a list of useful RSS/Atom feeds for an expat living in 
 
 Geographic levels:
 - city = primarily covers this city or its metro area
-- region = covers the broader state/province/Land/autonomous region
+- region = covers the **user's actual** state / province / Land / autonomous community / prefecture (the administrative region that contains ${city ? city : "the user's city"}). For example, a user in Sitges is in Catalonia — Costa Blanca, Andalucía, or Madrid feeds are NOT regional for them; reclassify those as country (if national in scope) or drop them.
 - country = national coverage
 
 You will receive a shortlist of candidate feeds discovered from a curated public RSS directory. Treat these as **pre-vetted real publishers**. Your job is to:
 (a) **Keep every shortlist candidate that plausibly serves a ${language}-speaking expat in ${country}** — when in doubt, keep it. URLs are validated server-side, so the validator drops broken ones.
-(b) Drop only obvious non-news entries: podcasts unrelated to news, single-topic hobby blogs (cooking, sports-team-only, etc.), defunct sites, or feeds clearly outside ${country}.
-(c) Classify each kept entry as city / region / country.
+(b) Drop obvious non-news entries (podcasts unrelated to news, single-topic hobby blogs, defunct sites, feeds clearly outside ${country}) AND drop region-specific feeds from a DIFFERENT region of ${country} than the user's (e.g. an Andalucía-only paper for a Catalonia user).
+(c) Classify each kept entry as city / region / country, where "region" means the user's own administrative region only. National wire services or country-wide publishers stay as country.
 (d) You may add 0-3 additional well-known feeds you are confident exist (e.g. major national broadcasters with stable RSS endpoints).
 
 Quantity targets (these are minimums, not caps):
@@ -312,11 +312,12 @@ Quantity targets (these are minimums, not caps):
 - region: 3-6
 - country: 6-15
 
-If the shortlist contains more relevant publishers than the target range, **return more — do not artificially cap**. The user benefits from breadth.
+If the shortlist contains more relevant publishers than the target range for country level, **return more — do not artificially cap**. For region level, only count publishers that genuinely cover the user's own region.
 
 Quality filtering applies primarily to feeds you add yourself, not to shortlist entries. For shortlist candidates, default to keeping.
 
 Other rules:
+- First, infer the user's administrative region from their city and country (e.g. Sitges, Spain → Catalonia; Munich, Germany → Bavaria; Lyon, France → Auvergne-Rhône-Alpes). Use this inferred region for all regional classification decisions.
 - Prefer feeds in the user's preferred language, but include 1-2 reputable English-language sources if useful for expats.
 - Do not invent publications or fabricate URLs using generic patterns like /rss or /feed without specific knowledge.
 - If city-level coverage is limited, use the nearest genuine metro/local outlet rather than promoting national outlets to city level.
