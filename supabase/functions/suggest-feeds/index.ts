@@ -138,20 +138,31 @@ Deno.serve(async (req) => {
       });
     }
 
-    const systemPrompt = `You are an expert on local and regional news outlets worldwide.
-Suggest well-known, real RSS/Atom feed URLs for the user's location.
-CRITICAL RULES:
-- Only return feeds you are confident actually exist as working RSS/Atom URLs.
-- If you don't know a real, specific feed URL for a publication, OMIT it. Do NOT guess or fabricate URLs.
-- Prefer feeds in the user's preferred language; include 1-2 reputable English-language internationals when relevant (e.g. The Local, Reuters country page, BBC).
-- Quantity targets (these are MAXIMUMS, not quotas — never invent feeds to hit a number):
-    * city-level: aim for 3-5 if the city has that many real outlets with known feeds (1-2 is fine for smaller cities)
-    * regional: aim for 4-6
-    * national / country-level: aim for 8-10
-- It is far better to return fewer feeds than to fabricate a single URL. Quality and correctness beat quantity.
-- Each suggestion must include: url (full https URL to the RSS/Atom feed), title (publication name), level (city|region|country), description (one short sentence about what they cover), publisher.`;
+    const systemPrompt = `You are an expert on local, regional, and national news outlets worldwide, with deep knowledge of their RSS/Atom feed URLs.
+Suggest well-known, real RSS/Atom feed URLs that an expat would find genuinely useful.
 
-    const userPrompt = `Suggest RSS feeds for an expat living in ${city ? `${city}, ` : ""}${country}. Preferred language: ${language}.`;
+CRITICAL RULES:
+- Only return feeds you are highly confident actually exist as working RSS/Atom URLs.
+- If you don't know the exact, specific feed URL for a publication, OMIT it. Never guess, fabricate, or invent URLs.
+- "level" must reflect the publication's actual editorial scope:
+    * city = covers primarily this city or its immediate metro area
+    * region = covers the broader province / state / autonomous community / Land (NOT the whole country)
+    * country = national publication
+- For the city: if the city is small and has no dedicated daily, infer the closest real local/metro paper or hyperlocal outlet — do NOT promote national papers to "city".
+- Prefer feeds in the user's preferred language; include 1-2 reputable English-language internationals (e.g. The Local <country>, Reuters country page, BBC, expat-focused sites).
+- Quality > quantity. Prioritize: major dailies, public broadcasters, well-known weeklies, reputable digital natives. Avoid obscure blogs, single-topic niche feeds, or aggregators.
+
+QUANTITY TARGETS (aim for these; only return fewer if you genuinely don't know more real URLs):
+    * city-level: 2-3
+    * regional: 3-5
+    * national / country: ~10
+
+Each suggestion must include: url (full https URL to the RSS/Atom feed itself, not the homepage), title (publication name), level (city|region|country), description (one short sentence about what they cover and why it's relevant to expats), publisher.`;
+
+    const userPrompt = `Suggest RSS feeds for an expat living in ${city ? `${city}, ` : ""}${country}.
+Preferred reading language: ${language}.
+
+Think carefully about which real publications cover ${city ? `${city} specifically (and its region)` : country} and only include feeds whose exact URL you actually know.`;
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -160,7 +171,7 @@ CRITICAL RULES:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
