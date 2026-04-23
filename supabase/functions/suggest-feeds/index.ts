@@ -49,11 +49,52 @@ interface FeedspotCandidate {
   publisher?: string;
 }
 
+const FEEDSPOT_COUNTRY_ALIASES: Record<string, string[]> = {
+  spain: ["spanish"],
+  germany: ["german"],
+  france: ["french"],
+  italy: ["italian"],
+  portugal: ["portuguese"],
+  netherlands: ["dutch"],
+  greece: ["greek"],
+  sweden: ["swedish"],
+  norway: ["norwegian"],
+  denmark: ["danish"],
+  finland: ["finnish"],
+  poland: ["polish"],
+  czech_republic: ["czech"],
+  austria: ["austrian", "german"],
+  switzerland: ["swiss", "german", "french", "italian"],
+  belgium: ["belgian", "dutch", "french"],
+  ireland: ["irish"],
+  scotland: ["scottish"],
+  wales: ["welsh"],
+  japan: ["japanese"],
+  china: ["chinese"],
+  taiwan: ["taiwanese", "chinese"],
+  korea: ["korean"],
+  south_korea: ["korean"],
+  india: ["indian"],
+  turkey: ["turkish"],
+  russia: ["russian"],
+  ukraine: ["ukrainian"],
+  israel: ["israeli", "hebrew"],
+  mexico: ["mexican", "spanish"],
+  argentina: ["argentinian", "spanish"],
+  colombia: ["colombian", "spanish"],
+  chile: ["chilean", "spanish"],
+  peru: ["peruvian", "spanish"],
+  brazil: ["brazilian", "portuguese"],
+  united_states: ["american"],
+  united_kingdom: ["british", "english"],
+  uk: ["british", "english"],
+};
+
 async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
   const url = `https://rss.feedspot.com/${slug}_news_rss_feeds/`;
   try {
     const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 4000);
+    const timeout = setTimeout(() => ctrl.abort(), 10000);
     const res = await fetch(url, {
       headers: {
         "User-Agent":
@@ -63,7 +104,10 @@ async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
       signal: ctrl.signal,
     });
     clearTimeout(timeout);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.log(`Feedspot ${slug}: ${res.status}`);
+      return [];
+    }
     const html = await res.text();
 
     // Extract candidate feed URLs from the HTML.
@@ -78,8 +122,11 @@ async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
       if (clean.length > 300) continue;
       if (!found.has(clean)) found.set(clean, { url: clean });
     }
-    return Array.from(found.values());
-  } catch {
+    const extracted = Array.from(found.values());
+    console.log(`Feedspot ${slug}: extracted ${extracted.length} candidates`);
+    return extracted;
+  } catch (error) {
+    console.log(`Feedspot ${slug}: ${error instanceof Error ? error.message : "fetch failed"}`);
     return [];
   }
 }
@@ -90,11 +137,21 @@ async function fetchFeedspotCandidates(
   language: string,
 ): Promise<FeedspotCandidate[]> {
   const slugs: string[] = [];
-  if (country) slugs.push(slugify(country));
-  if (language && language.toLowerCase() !== "english") slugs.push(slugify(language));
-  if (city) slugs.push(slugify(city));
+  const countrySlug = country ? slugify(country) : "";
+  const languageSlug = language ? slugify(language) : "";
+  const citySlug = city ? slugify(city) : "";
 
-  const results = await Promise.allSettled(slugs.map((s) => fetchFeedspotPage(s)));
+  if (countrySlug) {
+    slugs.push(countrySlug, ...((FEEDSPOT_COUNTRY_ALIASES[countrySlug] || []).map(slugify)));
+  }
+  if (languageSlug) slugs.push(languageSlug);
+  if (citySlug) slugs.push(citySlug);
+
+  const uniqueSlugs = slugs.filter((slug, index) => slug && slugs.indexOf(slug) === index);
+
+  console.log(`Feedspot slugs: ${uniqueSlugs.join(", ") || "(none)"}`);
+
+  const results = await Promise.allSettled(uniqueSlugs.map((s) => fetchFeedspotPage(s)));
   const all: FeedspotCandidate[] = [];
   for (const r of results) {
     if (r.status === "fulfilled") all.push(...r.value);
