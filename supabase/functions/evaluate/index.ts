@@ -150,7 +150,16 @@ Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "exp
     try {
       const response = await callOpenAI([{ role: "user", content: prompt }], true);
       const parsed = JSON.parse(response);
-      results.push({ article_title: article.title, ...parsed });
+      results.push({
+        article_title: article.title,
+        article_url: article.url,
+        original_title: article.title,
+        original_summary: article.summary || [],
+        translated_title: article.translated_title || article.title,
+        translated_summary: article.translated_summary || [],
+        source_language: article.language || '',
+        ...parsed,
+      });
     } catch (e) {
       console.error("Translation eval error:", e);
     }
