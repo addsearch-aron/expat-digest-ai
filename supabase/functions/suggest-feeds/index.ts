@@ -49,6 +49,47 @@ interface FeedspotCandidate {
   publisher?: string;
 }
 
+const FEEDSPOT_COUNTRY_ALIASES: Record<string, string[]> = {
+  spain: ["spanish"],
+  germany: ["german"],
+  france: ["french"],
+  italy: ["italian"],
+  portugal: ["portuguese"],
+  netherlands: ["dutch"],
+  greece: ["greek"],
+  sweden: ["swedish"],
+  norway: ["norwegian"],
+  denmark: ["danish"],
+  finland: ["finnish"],
+  poland: ["polish"],
+  czech_republic: ["czech"],
+  austria: ["austrian", "german"],
+  switzerland: ["swiss", "german", "french", "italian"],
+  belgium: ["belgian", "dutch", "french"],
+  ireland: ["irish"],
+  scotland: ["scottish"],
+  wales: ["welsh"],
+  japan: ["japanese"],
+  china: ["chinese"],
+  taiwan: ["taiwanese", "chinese"],
+  korea: ["korean"],
+  south_korea: ["korean"],
+  india: ["indian"],
+  turkey: ["turkish"],
+  russia: ["russian"],
+  ukraine: ["ukrainian"],
+  israel: ["israeli", "hebrew"],
+  mexico: ["mexican", "spanish"],
+  argentina: ["argentinian", "spanish"],
+  colombia: ["colombian", "spanish"],
+  chile: ["chilean", "spanish"],
+  peru: ["peruvian", "spanish"],
+  brazil: ["brazilian", "portuguese"],
+  united_states: ["american"],
+  united_kingdom: ["british", "english"],
+  uk: ["british", "english"],
+};
+
 async function fetchFeedspotPage(slug: string): Promise<FeedspotCandidate[]> {
   const url = `https://rss.feedspot.com/${slug}_news_rss_feeds/`;
   try {
@@ -90,11 +131,21 @@ async function fetchFeedspotCandidates(
   language: string,
 ): Promise<FeedspotCandidate[]> {
   const slugs: string[] = [];
-  if (country) slugs.push(slugify(country));
-  if (language && language.toLowerCase() !== "english") slugs.push(slugify(language));
-  if (city) slugs.push(slugify(city));
+  const countrySlug = country ? slugify(country) : "";
+  const languageSlug = language ? slugify(language) : "";
+  const citySlug = city ? slugify(city) : "";
 
-  const results = await Promise.allSettled(slugs.map((s) => fetchFeedspotPage(s)));
+  if (countrySlug) {
+    slugs.push(countrySlug, ...((FEEDSPOT_COUNTRY_ALIASES[countrySlug] || []).map(slugify)));
+  }
+  if (languageSlug) slugs.push(languageSlug);
+  if (citySlug) slugs.push(citySlug);
+
+  const uniqueSlugs = slugs.filter((slug, index) => slug && slugs.indexOf(slug) === index);
+
+  console.log(`Feedspot slugs: ${uniqueSlugs.join(", ") || "(none)"}`);
+
+  const results = await Promise.allSettled(uniqueSlugs.map((s) => fetchFeedspotPage(s)));
   const all: FeedspotCandidate[] = [];
   for (const r of results) {
     if (r.status === "fulfilled") all.push(...r.value);
