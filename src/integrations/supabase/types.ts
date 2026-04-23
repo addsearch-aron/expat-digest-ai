@@ -22,6 +22,7 @@ export type Database = {
           id: string
           is_translated: boolean | null
           language: string | null
+          original_title: string | null
           published_at: string | null
           source: string | null
           summary: string[] | null
@@ -38,6 +39,7 @@ export type Database = {
           id?: string
           is_translated?: boolean | null
           language?: string | null
+          original_title?: string | null
           published_at?: string | null
           source?: string | null
           summary?: string[] | null
@@ -54,6 +56,7 @@ export type Database = {
           id?: string
           is_translated?: boolean | null
           language?: string | null
+          original_title?: string | null
           published_at?: string | null
           source?: string | null
           summary?: string[] | null

@@ -121,7 +121,7 @@ async function runParallel<T>(tasks: (() => Promise<T>)[], concurrency: number):
 // Batch: classify + detect language for multiple articles in one call
 async function batchClassifyAndDetect(articles: { title: string; content: string }[]): Promise<{ topic: string; language: string }[]> {
   const articleDescriptions = articles.map((a, i) =>
-    `Article ${i + 1}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content).slice(0, 300)}`
+    `Article id=${i}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content).slice(0, 300)}`
   ).join('\n\n');
 
   const prompt = `For each article below, determine:
@@ -130,14 +130,24 @@ async function batchClassifyAndDetect(articles: { title: string; content: string
 
 You MUST choose exactly one topic from the list above. Use the exact spelling. If an article does not fit ANY of the listed topics, return "NONE" as the topic.
 
-Return a JSON object with key "results" containing an array of objects, each with "language" and "topic" fields. Return exactly ${articles.length} results in order.
+Return a JSON object with key "results" containing an array of objects, each with "id" (the integer id from the input), "language", and "topic" fields. You MUST include the "id" field on every result so we can match it back to the input. Return exactly ${articles.length} results, one per input id.
 
 ${articleDescriptions}`;
 
   const result = await callOpenAI([{ role: "user", content: prompt }], true);
   try {
     const parsed = JSON.parse(result);
-    return parsed.results || [];
+    const arr = parsed.results || [];
+    // Map results back to input order using id; fall back to position if id missing.
+    const byId = new Map<number, { topic: string; language: string }>();
+    arr.forEach((r: any, pos: number) => {
+      const id = typeof r?.id === 'number' ? r.id : pos;
+      byId.set(id, { topic: r?.topic ?? 'Unknown', language: r?.language ?? 'Unknown' });
+    });
+    if (arr.length !== articles.length) {
+      console.warn(`[batchClassifyAndDetect] expected ${articles.length} results, got ${arr.length}`);
+    }
+    return articles.map((_, i) => byId.get(i) ?? { topic: 'Unknown', language: 'Unknown' });
   } catch {
     return articles.map(() => ({ topic: "Unknown", language: "Unknown" }));
   }
@@ -146,21 +156,40 @@ ${articleDescriptions}`;
 // Batch: summarize multiple articles in one call
 async function batchSummarize(articles: { title: string; content: string }[]): Promise<string[][]> {
   const articleDescriptions = articles.map((a, i) =>
-    `Article ${i + 1}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content)}`
+    `Article id=${i}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content)}`
   ).join('\n\n---\n\n');
 
   const prompt = `Summarize each article below in a single concise paragraph (2-3 sentences). Only include information explicitly present in the article content. Do NOT add facts, names, dates, numbers, or context not present. If the content is sparse or only a title, return a single sentence based ONLY on what's there — do not invent details.
 
-Return a JSON object with key "summaries" containing an array of arrays, where each inner array has exactly 1 string (the paragraph summary). Return exactly ${articles.length} results in order.
+Return a JSON object with key "results" containing an array of objects. Each object MUST have:
+- "id": the integer id from the input (so we can match it back)
+- "summary": an array with exactly 1 string (the paragraph summary)
+
+Return exactly ${articles.length} results, one per input id.
 
 ${articleDescriptions}`;
 
   const result = await callOpenAI([{ role: "user", content: prompt }], true);
   try {
     const parsed = JSON.parse(result);
-    return parsed.summaries || articles.map(() => ["No summary available"]);
+    const arr = parsed.results || parsed.summaries || [];
+    const byId = new Map<number, string[]>();
+    arr.forEach((r: any, pos: number) => {
+      // Support either {id, summary:[...]} or legacy [string] entries.
+      if (Array.isArray(r)) {
+        byId.set(pos, r);
+      } else {
+        const id = typeof r?.id === 'number' ? r.id : pos;
+        const s = Array.isArray(r?.summary) ? r.summary : (typeof r?.summary === 'string' ? [r.summary] : null);
+        if (s) byId.set(id, s);
+      }
+    });
+    if (arr.length !== articles.length) {
+      console.warn(`[batchSummarize] expected ${articles.length} results, got ${arr.length}`);
+    }
+    return articles.map((a, i) => byId.get(i) ?? [a.title]);
   } catch {
-    return articles.map(() => ["No summary available"]);
+    return articles.map((a) => [a.title]);
   }
 }
 
@@ -170,7 +199,7 @@ async function batchSummarizeAndTranslate(
   targetLang: string
 ): Promise<{ summary: string[]; translatedTitle: string; translatedSummary: string[] }[]> {
   const articleDescriptions = articles.map((a, i) =>
-    `Article ${i + 1}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content)}`
+    `Article id=${i}:\nTitle: ${a.title}\nContent: ${stripHtml(a.content)}`
   ).join('\n\n---\n\n');
 
   const prompt = `For each article below:
@@ -178,25 +207,44 @@ async function batchSummarizeAndTranslate(
 2. Translate the title and the summary paragraph to ${targetLang}. Translate ONLY what is in the source. Do NOT add facts, names, dates, numbers, or context not present in the input. If the source is a single sentence, output a single sentence. Do not expand. If the summary is just a restatement of the title, the translated summary should also be just a restatement of the translated title — do not invent a longer summary.
 
 Return a JSON object with key "results" containing an array of objects, each with:
+- "id": the integer id from the input (REQUIRED — used to match results back to inputs)
 - "summary": array with 1 string (the paragraph summary in original language)
 - "translated_title": string (title in ${targetLang})
 - "translated_summary": array with 1 string (the paragraph summary in ${targetLang})
 
-Return exactly ${articles.length} results in order.
+Return exactly ${articles.length} results, one per input id. Do NOT drop, merge, or reorder items — every input id must appear exactly once in the output.
 
 ${articleDescriptions}`;
 
   const result = await callOpenAI([{ role: "user", content: prompt }], true);
   try {
     const parsed = JSON.parse(result);
-    return (parsed.results || []).map((r: any) => ({
-      summary: r.summary || ["No summary available"],
-      translatedTitle: r.translated_title || "",
-      translatedSummary: r.translated_summary || [],
-    }));
+    const arr = parsed.results || [];
+    const byId = new Map<number, { summary: string[]; translatedTitle: string; translatedSummary: string[] }>();
+    arr.forEach((r: any, pos: number) => {
+      const id = typeof r?.id === 'number' ? r.id : pos;
+      byId.set(id, {
+        summary: Array.isArray(r?.summary) ? r.summary : (r?.summary ? [r.summary] : []),
+        translatedTitle: r?.translated_title || "",
+        translatedSummary: Array.isArray(r?.translated_summary) ? r.translated_summary : (r?.translated_summary ? [r.translated_summary] : []),
+      });
+    });
+    if (arr.length !== articles.length) {
+      console.warn(`[batchSummarizeAndTranslate] expected ${articles.length} results, got ${arr.length}`);
+    }
+    return articles.map((a, i) => {
+      const got = byId.get(i);
+      if (!got) {
+        // Mis-pairing prevention: better to ship the title untranslated than to silently
+        // attach somebody else's translation to this article.
+        console.warn(`[batchSummarizeAndTranslate] missing result for id=${i}, falling back to title`);
+        return { summary: [a.title], translatedTitle: "", translatedSummary: [] };
+      }
+      return got;
+    });
   } catch {
-    return articles.map(() => ({
-      summary: ["No summary available"],
+    return articles.map((a) => ({
+      summary: [a.title],
       translatedTitle: "",
       translatedSummary: [],
     }));
@@ -393,6 +441,7 @@ serve(async (req) => {
       return {
         user_id: userId,
         title: isTranslated && data.translatedTitle ? data.translatedTitle : f.item.title,
+        original_title: f.item.title,
         source: f.item.source,
         url: f.item.url,
         content: stripHtml(f.item.content).slice(0, 1000),

@@ -184,9 +184,23 @@ export default function EvaluationPage() {
                     </div>
                     <ComparisonBlock
                       leftLabel={`Original${item.source_language ? ` (${item.source_language})` : ''}${typeof item.original_content_length === 'number' ? ` — ${item.original_content_length} chars` : ''}`}
-                      leftContent={(item.original_summary || []).join('\n')}
+                      leftContent={
+                        <>
+                          {item.original_title && (
+                            <p className="font-semibold mb-2">{item.original_title}</p>
+                          )}
+                          {(item.original_summary || []).join('\n')}
+                        </>
+                      }
                       rightLabel="Translation"
-                      rightContent={(item.translated_summary || []).join('\n')}
+                      rightContent={
+                        <>
+                          {item.translated_title && (
+                            <p className="font-semibold mb-2">{item.translated_title}</p>
+                          )}
+                          {(item.translated_summary || []).join('\n')}
+                        </>
+                      }
                     />
                     {item.explanation && (
                       <p className="text-xs text-muted-foreground border-t border-border/50 pt-2">
