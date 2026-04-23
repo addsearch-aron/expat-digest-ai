@@ -138,26 +138,41 @@ Deno.serve(async (req) => {
       });
     }
 
-    const systemPrompt = `You are an expert on local, regional, and national news outlets worldwide, with deep knowledge of their RSS/Atom feed URLs.
-Suggest well-known, real RSS/Atom feed URLs that an expat would find genuinely useful.
+    const systemPrompt = `You are an expert on local, regional, and national news outlets worldwide.
 
-CRITICAL RULES:
-- Only return feeds you are highly confident actually exist as working RSS/Atom URLs.
-- If you don't know the exact, specific feed URL for a publication, OMIT it. Never guess, fabricate, or invent URLs.
-- "level" must reflect the publication's actual editorial scope:
-    * city = covers primarily this city or its immediate metro area
-    * region = covers the broader province / state / autonomous community / Land (NOT the whole country)
-    * country = national publication
-- For the city: if the city is small and has no dedicated daily, infer the closest real local/metro paper or hyperlocal outlet — do NOT promote national papers to "city".
-- Prefer feeds in the user's preferred language; include 1-2 reputable English-language internationals (e.g. The Local <country>, Reuters country page, BBC, expat-focused sites).
-- Quality > quantity. Prioritize: major dailies, public broadcasters, well-known weeklies, reputable digital natives. Avoid obscure blogs, single-topic niche feeds, or aggregators.
+Your task is to suggest useful RSS/Atom feed URLs for an expat living in ${city ? `${city}, ` : ""}${country}, in ${language}.
 
-QUANTITY TARGETS (aim for these; only return fewer if you genuinely don't know more real URLs):
-    * city-level: 2-3
-    * regional: 3-5
-    * national / country: ~10
+Return only feeds from real, reputable publications that are geographically relevant to the user:
+- city = primarily covers this city or its metro area
+- region = covers the broader state/province/Land/autonomous region
+- country = national coverage
 
-Each suggestion must include: url (full https URL to the RSS/Atom feed itself, not the homepage), title (publication name), level (city|region|country), description (one short sentence about what they cover and why it's relevant to expats), publisher.`;
+Rules:
+- Prefer well-known local dailies, regional broadcasters, national public broadcasters, major newspapers, and reputable digital natives.
+- Prefer feeds in the user's preferred language.
+- Include at most 1-2 reputable English-language sources if genuinely useful to expats.
+- Do not invent publications.
+- Do not fabricate obviously fake feed URLs.
+- If a publication is real and the feed URL is reasonably likely but not certain, it may still be included because URLs will be validated server-side.
+- Prioritize geographic relevance and publication quality over quantity.
+- Avoid niche blogs, topic-specific feeds, and aggregators unless they are highly relevant to expats.
+
+Quantity targets:
+- city: 2-3
+- region: 3-5
+- country: 5-10
+
+For each suggestion include:
+- url
+- title
+- level
+- description
+- publisher
+
+Important:
+- Prefer recall over extreme conservatism, because all URLs will be live-validated later.
+- Still avoid obvious guessing.
+- If city-level coverage is limited, use the nearest genuine metro/local outlet rather than promoting national outlets to city level.`;
 
     const userPrompt = `Suggest RSS feeds for an expat living in ${city ? `${city}, ` : ""}${country}.
 Preferred reading language: ${language}.
