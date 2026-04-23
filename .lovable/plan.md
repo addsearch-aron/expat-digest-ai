@@ -1,38 +1,51 @@
 
 
-## Root cause: confidence rules suppress everything except 1-2 English feeds
+## Add web-search augmentation to `suggest-feeds` (balanced approach)
 
-### What's happening
-Logs from the last 6 Sitges/Spain calls:
-- Model proposes only **2-3 feeds total** (down from 6 before the tightening).
-- Of those, **0-1 pass validation** because the model now mostly returns one safe English feed (The Local / BBC) and skips the Spanish-language nationals it's less "100% sure" about by exact URL.
+Augment the LLM-only flow with a real-source discovery step so the model has actual feed URLs to choose from instead of guessing. Target: 4–6 validated feeds per request.
 
-The new "URL confidence rules" block, combined with "Prefer precision over recall", made the model so risk-averse that it abandons the quantity targets entirely. The instruction "Only return RSS URLs you are confident exist exactly as written" + "If unsure, omit the entry" effectively overrides the "5-10 country" target. GPT-4.1 has weak calibration for "I know this exact URL", so it collapses to a trivial set.
+### Approach: hybrid (Feedspot scrape + LLM filter), no new dependencies
 
-The previous, looser prompt was actually producing more *validated* feeds (1-3) than the new one (0-1), because validation already filters bad URLs — making the model self-censor as well is double filtering.
+1. **Discover candidate feeds from Feedspot** before calling the LLM.
+   - Build slugged URLs from the user's location and language and fetch them server-side from the edge function:
+     - `https://rss.feedspot.com/{country_slug}_news_rss_feeds/`
+     - `https://rss.feedspot.com/{language_slug}_news_rss_feeds/` (e.g. `spanish_news_rss_feeds`)
+     - `https://rss.feedspot.com/{city_slug}_news_rss_feeds/` (only if city provided)
+   - Parse the returned HTML with a lightweight regex pass to extract candidate feed URLs (links matching `https?://[^"'<> ]+(rss|feed|atom|xml|rss\.xml|/feed/)`), plus the publisher name from the surrounding heading text.
+   - Cap at ~30 candidates total, dedupe by URL.
+   - Wrap fetches in `Promise.allSettled` with a 4s timeout; if Feedspot returns 404 or fails, fall back to the existing LLM-only flow gracefully.
 
-### Fix: rebalance the prompt
+2. **Pass candidates to the LLM as a curated shortlist.**
+   - Add a new section to the user prompt: "Here are candidate feeds discovered from a public directory. Select the ones genuinely relevant to {city}/{country} for a {language}-speaking expat, classify each as city/region/country, and add 0–3 additional well-known feeds you know exist."
+   - The LLM's job changes from "recall feed URLs from memory" to "filter and classify a real list" — much higher precision.
+   - Keep quantity targets: city 1–3, region 3–5, country 5–10.
 
-**File:** `supabase/functions/suggest-feeds/index.ts` — system prompt only.
+3. **Validate as today.** Existing `validateFeed()` runs unchanged on the LLM's final selection.
 
-1. **Remove** the "URL confidence rules" block entirely (lines 176–182). Server-side validation already does this job; asking the model to also gatekeep just suppresses real publishers.
+### Why Feedspot
 
-2. **Soften** the "precision over recall" line (173) back to a balanced version:
-   > "All URLs are validated server-side, so prefer providing more candidate feeds from real, well-known publishers over withholding. Do not, however, fabricate URLs using generic patterns like `/rss` or `/feed` if you have no specific knowledge of that publisher's feed."
+- Public, no auth, predictable URL slugs per country/language/city.
+- Each list page contains the actual feed URLs in plain HTML — extractable with one regex pass, no JS rendering needed.
+- For Spain alone: `/spanish_news_rss_feeds/`, `/spain_news_rss_feeds/`, `/madrid_news_rss_feeds/`, `/barcelona_news_rss_feeds/` etc. all exist.
 
-3. **Restore city target to 1-3** (was 0-2). Even small towns usually have 1 nearby metro outlet worth surfacing; 0-2 with the strict rules produced 0 every time.
+### File changes
 
-4. **Add an explicit anchor list cue** to the country-level guidance:
-   > "For country-level feeds, prioritize major national publishers and public broadcasters (e.g. national newspapers of record, the country's public radio/TV broadcaster, established wire services). These typically have well-known, stable RSS endpoints."
-   This nudges the model toward outlets whose feed URLs it actually knows, without us hardcoding country lists.
+- **`supabase/functions/suggest-feeds/index.ts`** — only file touched.
+  - Add `slugify()` helper (lowercase, spaces→underscores, strip diacritics).
+  - Add `fetchFeedspotCandidates(city, country, language)` returning `{url, publisher}[]`.
+  - Insert candidates into the user prompt before the OpenAI call.
+  - Soften system prompt to acknowledge the shortlist (remove "you actually know" wording from user prompt).
+  - Keep model `gpt-4.1`, validator, auth, rate limit unchanged.
 
-5. **Keep** quantity targets: city 1-3, region 3-5, country 5-10.
+### Out of scope
 
-### Unchanged
-- User prompt template
-- Tool schema, model (`gpt-4.1`), validator, auth, rate limit
+- Caching Feedspot responses (can add later if rate-limit issues appear).
+- Robots.txt compliance review beyond a basic UA string — Feedspot pages are publicly indexed and we fetch ≤3 pages per user request, well under any reasonable threshold.
+- Switching to a paid search API (Perplexity/Firecrawl) — only worth doing if Feedspot proves insufficient.
 
 ### Expected impact
-- Model returns 6-12 candidates again instead of 2-3.
-- Validation drops the bad ones (as designed), leaving ~3-6 valid feeds for Sitges-class queries instead of 0-1.
+
+- Spanish/Sitges-class queries: 8–15 real candidate URLs from Feedspot → LLM picks ~6–10 → validator yields 4–6 valid feeds.
+- Big drop in fabricated URLs since the LLM is choosing from a real list, not generating from memory.
+- Adds ~500ms–1.5s latency from the parallel Feedspot fetches; acceptable for the balanced trade-off.
 
