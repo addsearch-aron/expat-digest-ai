@@ -23,7 +23,7 @@ interface ValidatedFeed extends Suggested {
 // Simple in-memory rate limiter (per cold instance)
 const rateLimits = new Map<string, number[]>();
 const RATE_WINDOW_MS = 60 * 60 * 1000;
-const RATE_MAX = 10;
+const RATE_MAX = 20;
 
 function checkRateLimit(userId: string): boolean {
   const now = Date.now();
