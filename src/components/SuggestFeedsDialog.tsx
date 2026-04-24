@@ -46,6 +46,7 @@ export default function SuggestFeedsDialog({
   const [feeds, setFeeds] = useState<SuggestedFeed[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
+  const [totalSuggested, setTotalSuggested] = useState(0);
 
   useEffect(() => {
     if (open) void fetchSuggestions();
@@ -56,13 +57,16 @@ export default function SuggestFeedsDialog({
     setLoading(true);
     setFeeds([]);
     setSelected(new Set());
+    setTotalSuggested(0);
     try {
       const { data, error } = await supabase.functions.invoke("suggest-feeds", {
         body: { country, city, language },
       });
       if (error) throw error;
+      const suggested: SuggestedFeed[] = data?.feeds || [];
       const existing = new Set(existingUrls);
-      const fresh: SuggestedFeed[] = (data?.feeds || []).filter((f: SuggestedFeed) => !existing.has(f.url));
+      const fresh: SuggestedFeed[] = suggested.filter((f: SuggestedFeed) => !existing.has(f.url));
+      setTotalSuggested(suggested.length);
 
       // Pre-select all suggested feeds by default
       const preselected = new Set<string>(fresh.map((f) => f.url));
@@ -70,10 +74,15 @@ export default function SuggestFeedsDialog({
       setFeeds(fresh);
       setSelected(preselected);
 
-      if (fresh.length === 0) {
+      if (suggested.length === 0) {
         toast({
           title: "No new feeds found",
           description: "We couldn't find additional validated feeds for this location.",
+        });
+      } else if (fresh.length === 0) {
+        toast({
+          title: "Suggestions already added",
+          description: "All suggested feeds for this location are already in your list.",
         });
       }
     } catch (e: any) {
@@ -139,7 +148,9 @@ export default function SuggestFeedsDialog({
             </div>
           ) : feeds.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              No validated feeds found for this location.
+              {totalSuggested > 0
+                ? "All suggested feeds for this location are already in My Feeds."
+                : "No validated feeds found for this location."}
             </div>
           ) : (
             <div className="space-y-5">
