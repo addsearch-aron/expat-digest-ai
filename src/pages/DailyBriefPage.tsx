@@ -308,7 +308,68 @@ export default function DailyBriefPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No summary available.</p>
+                isSameDay(selectedDate, today) ? (
+                  <div className="py-8 text-center">
+                    <div className="h-12 w-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+                      <Clock className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-base font-semibold text-foreground mb-2">
+                      Your briefing isn't ready yet
+                    </h3>
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto mb-5 leading-relaxed">
+                      {hasScheduledTimePassed(digestHour, digestTimezone) ? (
+                        <>
+                          Your daily brief was scheduled for{" "}
+                          <span className="font-medium text-foreground">
+                            {formatScheduledTime(digestHour, digestTimezone)}
+                          </span>{" "}
+                          but hasn't arrived yet. You can generate it manually below, or check a previous day.
+                        </>
+                      ) : (
+                        <>
+                          Your daily brief will be ready around{" "}
+                          <span className="font-medium text-foreground">
+                            {formatScheduledTime(digestHour, digestTimezone)}
+                          </span>
+                          . We'll generate it automatically — or you can run it now.
+                        </>
+                      )}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Button
+                        onClick={generateDigest}
+                        disabled={loading}
+                        className="rounded-xl px-5 h-10 font-medium shadow-sm"
+                        style={{ background: loading ? undefined : 'var(--gradient-hero)' }}
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                        {loading ? "Generating..." : "Generate now"}
+                      </Button>
+                      {last7Days.length > 1 && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setSelectedDate(last7Days[1])}
+                          className="rounded-xl px-5 h-10 font-medium"
+                        >
+                          View yesterday's brief
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      No briefing was generated for this day.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => setSelectedDate(today)}
+                      className="rounded-xl px-5 h-10 font-medium"
+                    >
+                      Back to today
+                    </Button>
+                  </div>
+                )
               )}
             </CardContent>
           </Card>
