@@ -1,4 +1,4 @@
-import { forwardRef, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -78,13 +78,42 @@ function ThinSourceChip() {
 }
 
 export default function EvaluationPage() {
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const { toast } = useToast();
   const [faithfulness, setFaithfulness] = useState<any>(null);
   const [translation, setTranslation] = useState<any>(null);
   const [classification, setClassification] = useState<any>(null);
+  const [dates, setDates] = useState<Record<string, string | null>>({
+    faithfulness: null,
+    translation: null,
+    classification: null,
+  });
   const [loadingType, setLoadingType] = useState<string | null>(null);
   const [openDetails, setOpenDetails] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("evaluation_results")
+        .select("eval_type, results, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (!data) return;
+      const latest: Record<string, { results: any; created_at: string }> = {};
+      for (const row of data) {
+        if (!latest[row.eval_type]) latest[row.eval_type] = { results: row.results, created_at: row.created_at };
+      }
+      if (latest.faithfulness) setFaithfulness(latest.faithfulness.results);
+      if (latest.translation) setTranslation(latest.translation.results);
+      if (latest.classification) setClassification(latest.classification.results);
+      setDates({
+        faithfulness: latest.faithfulness?.created_at ?? null,
+        translation: latest.translation?.created_at ?? null,
+        classification: latest.classification?.created_at ?? null,
+      });
+    })();
+  }, [user]);
 
   const runEval = async (evalType: string) => {
     setLoadingType(evalType);
@@ -99,6 +128,7 @@ export default function EvaluationPage() {
       if (evalType === "faithfulness") setFaithfulness(data);
       else if (evalType === "translation") setTranslation(data);
       else if (evalType === "classification") setClassification(data);
+      setDates((d) => ({ ...d, [evalType]: new Date().toISOString() }));
 
       toast({ title: `${evalType} evaluation complete` });
     } catch (e: any) {
@@ -107,6 +137,12 @@ export default function EvaluationPage() {
       setLoadingType(null);
     }
   };
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
 
   const evalCards = [
     {
@@ -294,12 +330,21 @@ export default function EvaluationPage() {
         {evalCards.map(({ key, title, icon: Icon, description, data, renderResult }) => (
           <Card key={key} className="border-border/50 overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2.5 text-lg" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center shrink-0">
                   <Icon className="h-4 w-4 text-accent-foreground" />
                 </div>
-                {title}
-              </CardTitle>
+                <div className="min-w-0">
+                  <CardTitle className="text-lg" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                    {title}
+                  </CardTitle>
+                  {dates[key] && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Last run: {formatDate(dates[key]!)}
+                    </p>
+                  )}
+                </div>
+              </div>
               <Button
                 size="sm"
                 variant="outline"
@@ -308,7 +353,7 @@ export default function EvaluationPage() {
                 className="rounded-lg"
               >
                 {loadingType === key ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                Run Check
+                {data ? "Rerun" : "Run Check"}
               </Button>
             </CardHeader>
             <CardContent>
