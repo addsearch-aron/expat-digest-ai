@@ -62,7 +62,20 @@ export default function SuggestFeedsDialog({
       const { data, error } = await supabase.functions.invoke("suggest-feeds", {
         body: { country, city, language },
       });
-      if (error) throw error;
+      if (error) {
+        // supabase.functions.invoke hides the response body on non-2xx; try to read it.
+        let serverMsg: string | undefined;
+        try {
+          const ctx = (error as any)?.context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            serverMsg = body?.error;
+          }
+        } catch {
+          // ignore
+        }
+        throw new Error(serverMsg || error.message || "Request failed");
+      }
       const suggested: SuggestedFeed[] = data?.feeds || [];
       const existing = new Set(existingUrls);
       const fresh: SuggestedFeed[] = suggested.filter((f: SuggestedFeed) => !existing.has(f.url));
