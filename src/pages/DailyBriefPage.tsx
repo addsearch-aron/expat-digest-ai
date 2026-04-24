@@ -33,6 +33,41 @@ function isSameDay(a: Date, b: Date): boolean {
 
 const DAY_ABBREVS = ["S", "M", "T", "W", "T", "F", "S"];
 
+function formatScheduledTime(hour: number, timezone: string): string {
+  try {
+    const d = new Date();
+    d.setHours(hour, 0, 0, 0);
+    const timeStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+    // The Date above is in local tz; instead build correctly using a fixed UTC reference is overkill.
+    // Simpler: just show user-configured hour as a plain time + timezone label.
+    const h12 = ((hour + 11) % 12) + 1;
+    const ampm = hour < 12 ? "AM" : "PM";
+    return `${h12}:00 ${ampm} (${timezone})`;
+  } catch {
+    return `${hour}:00 (${timezone})`;
+  }
+}
+
+function hasScheduledTimePassed(hour: number, timezone: string): boolean {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hourCycle: "h23",
+    }).formatToParts(new Date());
+    const hourPart = parts.find((p) => p.type === "hour");
+    const localHour = hourPart ? parseInt(hourPart.value, 10) : new Date().getHours();
+    return localHour >= hour;
+  } catch {
+    return new Date().getHours() >= hour;
+  }
+}
+
 export default function DailyBriefPage() {
   const { user, session } = useAuth();
   const { toast } = useToast();
