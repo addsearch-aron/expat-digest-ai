@@ -44,6 +44,8 @@ export default function DailyBriefPage() {
   const [briefSummary, setBriefSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"summary" | "articles">("summary");
+  const [digestHour, setDigestHour] = useState<number>(8);
+  const [digestTimezone, setDigestTimezone] = useState<string>("Europe/Berlin");
 
   const last7Days = useMemo(() => getLast7Days(), []);
   const [selectedDate, setSelectedDate] = useState<Date>(last7Days[0]);
@@ -52,6 +54,7 @@ export default function DailyBriefPage() {
   useEffect(() => {
     if (user) {
       loadArticles();
+      loadProfileSchedule();
     }
   }, [user]);
 
@@ -96,6 +99,22 @@ export default function DailyBriefPage() {
       .eq("user_id", user!.id)
       .order("published_at", { ascending: false });
     setArticles(data || []);
+  };
+
+  const loadProfileSchedule = async () => {
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("digest_hour, digest_timezone")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (data) {
+        if (typeof data.digest_hour === "number") setDigestHour(data.digest_hour);
+        if (data.digest_timezone) setDigestTimezone(data.digest_timezone);
+      }
+    } catch (e) {
+      console.error("Failed to load digest schedule:", e);
+    }
   };
 
   const generateDigest = async () => {

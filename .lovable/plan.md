@@ -1,40 +1,63 @@
+## Goal
+Replace the bare "No summary available." text on the Daily Brief page with a helpful, context-aware empty state — especially for **today**, where the briefing may simply not be ready yet.
 
+## File to change
+`src/pages/DailyBriefPage.tsx` only. No backend, no schema changes.
 
-## Increase yield: have LLM keep most relevant Feedspot candidates
+## Changes
 
-**Problem:** Feedspot returns 17 candidates for Spanish news, but the LLM picks only 4. The user manually identified 7+ relevant feeds on the same page. The model is over-filtering because (a) candidates are bare URLs with no context, (b) the prompt biases toward caution, and (c) there's no explicit "keep most" instruction.
+### 1. Load the user's scheduled digest time
+In the existing profile-loading area (or in `loadCachedSummary`'s effect), add a one-time fetch:
 
-### Changes — `supabase/functions/suggest-feeds/index.ts` only
+```ts
+const { data } = await supabase
+  .from("profiles")
+  .select("digest_hour, digest_timezone")
+  .eq("user_id", user.id)
+  .single();
+```
 
-**1. Extract publisher hints from Feedspot HTML, not just URLs.**
-Feedspot list pages have a predictable structure: each entry has a heading (publisher name) followed by the feed link. Update `fetchFeedspotPage` to:
-- Capture the `<h2>`/`<h3>`/`<h4>` text or anchor text near each extracted URL (look back ~500 chars in the HTML for the nearest heading or `<a ...>Name</a>`).
-- Return `{ url, publisher }` with publisher populated when extractable.
-- Pass these to the LLM as `- {publisher}: {url}` lines instead of bare URLs.
+Store as `digestHour` (number, default 8) and `digestTimezone` (string, default `Europe/Berlin`) in component state.
 
-This gives the LLM enough context to confidently keep entries instead of dropping unknown URLs.
+### 2. Compute "is today" and a formatted scheduled time
+- `isToday = isSameDay(selectedDate, today)` (helper already exists at line 30).
+- Format the scheduled time as e.g. `"8:00 AM (Europe/Berlin)"` using `Intl.DateTimeFormat` with `hour: 'numeric'`, `hour12: true`, `timeZone: digestTimezone`.
+- Compute `scheduledPassed` = current time in `digestTimezone` is past `digest_hour`. (Used to tweak copy: "should be ready shortly" vs. "will be ready around …".)
 
-**2. Rewrite shortlist instructions in system prompt to maximize keep-rate.**
-Replace the current "Important" block with:
-> "You will receive a shortlist of candidate feeds discovered from a curated public RSS directory. Treat these as **pre-vetted real publishers**. Your job is to (a) **keep every candidate that plausibly serves a {language}-speaking expat in {country}** — when in doubt, keep it; the validator drops broken URLs. (b) Drop only obvious non-news entries (podcasts unrelated to news, single-topic hobby blogs, defunct sites). (c) Classify each kept entry as city / region / country. (d) You may add 0-3 additional well-known feeds you are confident exist."
+### 3. Replace the empty-state block (line 291–293)
+Current:
+```tsx
+<p className="text-sm text-muted-foreground">No summary available.</p>
+```
 
-**3. Raise quantity targets to match shortlist size.**
-- city: 1-3 (unchanged)
-- region: 3-6 (was 3-5)
-- country: **6-15** (was 5-10) — when shortlist has 15+ candidates, allow keeping most.
-- Add: "If the shortlist contains more than {target} relevant publishers, return more — do not artificially cap."
+Replace with two branches:
 
-**4. Soften the "Avoid niche blogs / Prioritize quality over quantity" lines** — these conflict with the goal of keeping shortlist entries. Replace with: "For shortlist candidates, default to keeping. Quality filtering applies primarily to feeds you add yourself."
+**A. When `isToday` (briefing not generated yet today):**
+- Icon (Clock or Sparkles) in a soft circular badge (matches the existing "no articles" empty state style at line 304).
+- Headline: *"Your briefing isn't ready yet"*
+- Body copy:
+  - If `!scheduledPassed`: *"Your daily brief will be ready around **8:00 AM (Europe/Berlin)**. We'll generate it automatically — no action needed."*
+  - If `scheduledPassed`: *"Your daily brief was scheduled for **8:00 AM (Europe/Berlin)** but hasn't arrived yet. You can generate it manually below."*
+- Two buttons side by side:
+  - Primary: **"Generate now"** → calls existing `generateDigest()`, disabled while `loading`, shows spinner.
+  - Secondary (outline): **"View yesterday's brief"** → `setSelectedDate(last7Days[1])`.
 
-**5. Pass candidate count into the user prompt** so the model sees an explicit expectation:
-> "The shortlist below contains {N} candidates. Aim to keep the majority that serve a {language}-speaking expat audience."
+**B. When `!isToday` (past day with no briefing):**
+- Smaller, quieter message: *"No briefing was generated for this day."*
+- Single secondary button: **"Back to today"** → `setSelectedDate(today)`.
 
-### Expected impact
-- Spanish/Spain query: 17 candidates → LLM keeps ~10-13 → validator yields 6-10 valid feeds (vs current 4).
-- Small/obscure locations unaffected (shortlist will simply be smaller).
+### 4. Styling
+Reuse existing patterns from this file:
+- Wrap the empty state in a centered block with `py-10 text-center` inside the existing `<CardContent>`.
+- Soft icon badge: `h-12 w-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4` (same as line 304).
+- Buttons: `rounded-xl`, primary uses `style={{ background: 'var(--gradient-hero)' }}` to match the header CTA at line 165.
 
-### Out of scope
-- Caching Feedspot pages.
-- Switching parsing to a real HTML parser (regex with backward-search heading lookup is sufficient).
-- Changing model, validator, auth, or rate-limit logic.
+## Out of scope
+- No changes to the digest edge function or scheduling.
+- No new DB columns; `digest_hour` / `digest_timezone` already exist on `profiles`.
+- The top-right "Generate Digest" header button stays as-is (the new in-card "Generate now" is an additional, contextual entry point).
 
+## Acceptance
+- Visiting today's brief before the digest runs shows the scheduled time, a Generate Now button, and a link to yesterday.
+- Visiting an older day with no briefing shows a quieter message and a "Back to today" button.
+- Once a briefing exists for the selected day, behavior is unchanged.
