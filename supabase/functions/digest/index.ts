@@ -481,8 +481,15 @@ serve(async (req) => {
           { role: "user", content: `Here are today's articles:\n\n${input}\n\nProduce a 3-4 paragraph executive briefing with article references in [N] format.` }
         ]);
 
-        // Delete old summaries for this user, then insert new one
-        await supabase.from("executive_summaries").delete().eq("user_id", userId);
+        // Delete only today's summaries for this user (preserve last 7 days of history),
+        // then insert the fresh one. Older summaries are pruned by the retention cron.
+        const startOfToday = new Date();
+        startOfToday.setUTCHours(0, 0, 0, 0);
+        await supabase
+          .from("executive_summaries")
+          .delete()
+          .eq("user_id", userId)
+          .gte("created_at", startOfToday.toISOString());
         const { error: sumError } = await supabase.from("executive_summaries").insert({
           user_id: userId,
           summary: summaryText.trim(),
