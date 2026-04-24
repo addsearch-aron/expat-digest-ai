@@ -93,7 +93,7 @@ export default function FeedsPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         <h1 className="text-3xl font-bold tracking-tight">My Feeds</h1>
 
-        {profile?.country && (
+        {(profile?.country || profile?.city) && (
           <Card className="border-primary/30 overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
             <CardContent className="p-5 flex items-center justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
@@ -104,7 +104,7 @@ export default function FeedsPage() {
                   <p className="font-medium text-sm">Suggest feeds for your location</p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                     <MapPin className="h-3 w-3" />
-                    {[profile.city, profile.country].filter(Boolean).join(", ")}
+                    {[profile?.city, profile?.country].filter(Boolean).join(", ") || "your location"}
                   </p>
                 </div>
               </div>
@@ -181,13 +181,13 @@ export default function FeedsPage() {
           </CardContent>
         </Card>
 
-        {profile?.country && (
+        {(profile?.country || profile?.city) && (
           <SuggestFeedsDialog
             open={suggestOpen}
             onOpenChange={setSuggestOpen}
-            country={profile.country}
-            city={profile.city}
-            language={profile.preferred_language}
+            country={profile?.country || ""}
+            city={profile?.city}
+            language={profile?.preferred_language}
             existingUrls={feeds.map((f) => f.feed_url)}
             onAdd={handleAddSuggested}
           />
