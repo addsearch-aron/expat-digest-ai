@@ -224,7 +224,14 @@ Return a JSON object: {"verdict": "accurate|minor issues|major distortion", "exp
 }
 
 async function evaluateClassification(): Promise<any> {
-  const results: { expected: string; predicted: string; correct: boolean }[] = [];
+  const results: {
+    article_title?: string;
+    content_excerpt?: string;
+    expected: string;
+    predicted: string;
+    correct: boolean;
+    explanation?: string;
+  }[] = [];
   const shuffled = [...EVAL_DATASET].sort(() => Math.random() - 0.5);
   const sample = shuffled.slice(0, 10);
 
