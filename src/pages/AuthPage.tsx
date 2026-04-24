@@ -61,7 +61,7 @@ export default function AuthPage() {
           <div className="inline-flex h-12 w-12 rounded-2xl items-center justify-center text-primary-foreground font-bold text-lg mb-4" style={{ background: 'var(--gradient-hero)' }}>
             E
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Expat Daily Brief</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Expat Digest</h1>
           <p className="text-sm text-muted-foreground mt-1">AI-powered news, personalized for you</p>
         </div>
 
