@@ -24,7 +24,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               E
             </div>
             <span className="font-bold text-lg tracking-tight text-foreground" style={{ fontFamily: "'DM Serif Display', serif" }}>
-              Expat Daily Brief
+              Expat Digest
             </span>
           </Link>
           <nav className="flex items-center gap-0.5">
