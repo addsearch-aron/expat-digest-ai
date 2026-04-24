@@ -33,6 +33,41 @@ function isSameDay(a: Date, b: Date): boolean {
 
 const DAY_ABBREVS = ["S", "M", "T", "W", "T", "F", "S"];
 
+function formatScheduledTime(hour: number, timezone: string): string {
+  try {
+    const d = new Date();
+    d.setHours(hour, 0, 0, 0);
+    const timeStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+    // The Date above is in local tz; instead build correctly using a fixed UTC reference is overkill.
+    // Simpler: just show user-configured hour as a plain time + timezone label.
+    const h12 = ((hour + 11) % 12) + 1;
+    const ampm = hour < 12 ? "AM" : "PM";
+    return `${h12}:00 ${ampm} (${timezone})`;
+  } catch {
+    return `${hour}:00 (${timezone})`;
+  }
+}
+
+function hasScheduledTimePassed(hour: number, timezone: string): boolean {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hourCycle: "h23",
+    }).formatToParts(new Date());
+    const hourPart = parts.find((p) => p.type === "hour");
+    const localHour = hourPart ? parseInt(hourPart.value, 10) : new Date().getHours();
+    return localHour >= hour;
+  } catch {
+    return new Date().getHours() >= hour;
+  }
+}
+
 export default function DailyBriefPage() {
   const { user, session } = useAuth();
   const { toast } = useToast();
@@ -44,6 +79,8 @@ export default function DailyBriefPage() {
   const [briefSummary, setBriefSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"summary" | "articles">("summary");
+  const [digestHour, setDigestHour] = useState<number>(8);
+  const [digestTimezone, setDigestTimezone] = useState<string>("Europe/Berlin");
 
   const last7Days = useMemo(() => getLast7Days(), []);
   const [selectedDate, setSelectedDate] = useState<Date>(last7Days[0]);
@@ -52,6 +89,7 @@ export default function DailyBriefPage() {
   useEffect(() => {
     if (user) {
       loadArticles();
+      loadProfileSchedule();
     }
   }, [user]);
 
@@ -96,6 +134,22 @@ export default function DailyBriefPage() {
       .eq("user_id", user!.id)
       .order("published_at", { ascending: false });
     setArticles(data || []);
+  };
+
+  const loadProfileSchedule = async () => {
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("digest_hour, digest_timezone")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (data) {
+        if (typeof data.digest_hour === "number") setDigestHour(data.digest_hour);
+        if (data.digest_timezone) setDigestTimezone(data.digest_timezone);
+      }
+    } catch (e) {
+      console.error("Failed to load digest schedule:", e);
+    }
   };
 
   const generateDigest = async () => {
@@ -289,7 +343,68 @@ export default function DailyBriefPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No summary available.</p>
+                isSameDay(selectedDate, today) ? (
+                  <div className="py-8 text-center">
+                    <div className="h-12 w-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+                      <Clock className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-base font-semibold text-foreground mb-2">
+                      Your briefing isn't ready yet
+                    </h3>
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto mb-5 leading-relaxed">
+                      {hasScheduledTimePassed(digestHour, digestTimezone) ? (
+                        <>
+                          Your daily brief was scheduled for{" "}
+                          <span className="font-medium text-foreground">
+                            {formatScheduledTime(digestHour, digestTimezone)}
+                          </span>{" "}
+                          but hasn't arrived yet. You can generate it manually below, or check a previous day.
+                        </>
+                      ) : (
+                        <>
+                          Your daily brief will be ready around{" "}
+                          <span className="font-medium text-foreground">
+                            {formatScheduledTime(digestHour, digestTimezone)}
+                          </span>
+                          . We'll generate it automatically — or you can run it now.
+                        </>
+                      )}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Button
+                        onClick={generateDigest}
+                        disabled={loading}
+                        className="rounded-xl px-5 h-10 font-medium shadow-sm"
+                        style={{ background: loading ? undefined : 'var(--gradient-hero)' }}
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                        {loading ? "Generating..." : "Generate now"}
+                      </Button>
+                      {last7Days.length > 1 && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setSelectedDate(last7Days[1])}
+                          className="rounded-xl px-5 h-10 font-medium"
+                        >
+                          View yesterday's brief
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      No briefing was generated for this day.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => setSelectedDate(today)}
+                      className="rounded-xl px-5 h-10 font-medium"
+                    >
+                      Back to today
+                    </Button>
+                  </div>
+                )
               )}
             </CardContent>
           </Card>
